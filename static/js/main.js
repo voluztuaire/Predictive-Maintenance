@@ -95,6 +95,7 @@ function fetchAndUpdateMetrics() {
             document.getElementById('val-pressure').innerHTML = data.pressure + ' <span class="unit">bar</span>';
 
             currentDevice = data.device;
+            loadSparklines();
         })
         .catch(error => console.error('Error updating status:', error));
 }
@@ -291,3 +292,99 @@ function refreshData() {
 
 function triggerBell() { alert("Placeholder notification action triggered."); }
 function investigateAlert() { alert("Navigating to AI pattern degradation logs."); }
+
+/* SPARKLINE CHARTS (per-parameter trend, shown as small charts on each stat card) */
+let sparklineCharts = {};
+
+function renderSparkline(canvasId, labels, data, color) {
+    if (sparklineCharts[canvasId]) {
+        sparklineCharts[canvasId].destroy();
+    }
+    const ctx = document.getElementById(canvasId).getContext('2d');
+    sparklineCharts[canvasId] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                data: data,
+                borderColor: color,
+                backgroundColor: color + '22',
+                borderWidth: 2,
+                pointRadius: 0,
+                tension: 0.4,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { display: false },
+                y: { display: false }
+            }
+        }
+    });
+}
+
+function loadSparklines() {
+    const url = currentDevice ? `/api/history?device=${encodeURIComponent(currentDevice)}` : '/api/history';
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            renderSparkline('spark-temp', data.labels, data.temperature, '#f97316');
+            renderSparkline('spark-vib', data.labels, data.vibration, '#a855f7');
+            renderSparkline('spark-volt', data.labels, data.voltage, '#38bdf8');
+            renderSparkline('spark-rpm', data.labels, data.rpm, '#22c55e');
+        })
+        .catch(error => console.error('Error loading sparklines:', error));
+}
+
+/* REPORT GENERATOR (PDF download with custom motor/field selection) */
+function openReportModal() {
+    const select = document.getElementById('report-motors');
+    select.innerHTML = '';
+    fetch('/api/devices')
+        .then(r => r.json())
+        .then(data => {
+            data.devices.forEach(id => {
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.text = id;
+                opt.selected = true;
+                select.appendChild(opt);
+            });
+        });
+    document.getElementById('report-modal').style.display = 'flex';
+}
+
+function closeReportModal() {
+    document.getElementById('report-modal').style.display = 'none';
+}
+
+function submitReport() {
+    const motors = Array.from(document.getElementById('report-motors').selectedOptions).map(o => o.value);
+    const fields = Array.from(document.querySelectorAll('.report-field:checked')).map(cb => cb.value);
+    const includePredictions = document.getElementById('report-predictions').checked;
+
+    if (motors.length === 0) {
+        alert("Please select at least one motor.");
+        return;
+    }
+
+    fetch('/api/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ motors, fields, include_predictions: includePredictions })
+    })
+    .then(r => r.blob())
+    .then(blob => {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'winteq_maintenance_report.pdf';
+        a.click();
+        closeReportModal();
+    })
+    .catch(error => console.error('Error generating report:', error));
+}
