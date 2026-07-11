@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Winteq Predictive Maintenance</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+    <div class="layout-container">
+
+    <aside class="sidebar glass-card">
+        <div class="logo-container">
+            <h2>WINTEQ</h2>
+            <p>Predictive Maintenance</p>
+        </div>
+
+        <ul class="nav-menu">
+            <li class="nav-item active" onclick="switchTab('dashboard')">
+                <a href="#dashboard">
+                    <span class="icon"><i class="fa-solid fa-chart-pie"></i></span>
+                    <span class="text">Dashboard</span>
+                </a>
+            </li>
+            <li class="nav-item" onclick="switchTab('assets')">
+                <a href="#assets">
+                    <span class="icon"><i class="fa-solid fa-microchip"></i></span>
+                    <span class="text">Motor Assets</span>
+                </a>
+            </li>
+            <li class="nav-item" onclick="switchTab('sensors')">
+                <a href="#sensors">
+                    <span class="icon"><i class="fa-solid fa-wave-square"></i></span>
+                    <span class="text">Sensor Data</span>
+                </a>
+            </li>
+            <li class="nav-item" onclick="switchTab('alerts')">
+                <a href="#alerts">
+                    <span class="icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
+                    <span class="text">AI Alerts</span>
+                </a>
+            </li>
+            {% if is_admin %}
+            <li class="nav-item" onclick="switchTab('settings')">
+                <a href="#settings">
+                    <span class="icon"><i class="fa-solid fa-gear"></i></span>
+                    <span class="text">Settings</span>
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+
+        <div class="sidebar-footer">
+            <div class="ai-status-box">
+                <span class="pulse-dot"></span>
+                <div>
+                    <p class="ai-status-title">AI Engine Active</p>
+                    <p class="ai-status-sub">Pattern recognition running</p>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+        <main class="main-content">
+            <header class="top-bar">
+                <div class="search-wrap">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" placeholder="Search induction motor ID...">
+                </div>
+
+                <div class="top-bar-right">
+                    <div class="device-select-wrap">
+                        <i class="fa-solid fa-server"></i>
+                        <select id="device-select" onchange="selectDevice(this.value)"></select>
+                    </div>
+
+                    <div class="user-wrap">
+                        <span style="font-size:12px;color:var(--text-muted);">
+                            {{ username }} {% if is_admin %}<span class="badge" style="margin-left:6px;">Admin</span>{% endif %}
+                        </span>
+                        <div class="btn-icon" onclick="triggerBell()"><i class="fa-solid fa-bell"></i></div>
+                        <a href="{{ url_for('auth.logout') }}" class="btn-icon" title="Log out" style="text-decoration:none;">
+                            <i class="fa-solid fa-right-from-bracket"></i>
+                        </a>
+                        <div class="avatar">{{ username[:2].upper() }}</div>
+                    </div>
+                </div>
+            </header>
+
+            <!-- DASHBOARD -->
+            <div class="dashboard-grid" id="page-dashboard">
+
+                <div class="kpi-cards">
+                    <div class="card glass-card kpi-card">
+                        <div class="kpi-icon health"><i class="fa-solid fa-heart-pulse"></i></div>
+                        <div class="kpi-body">
+                            <div class="card-title">Real-time Health Score</div>
+                            <div class="card-value" id="val-health">88.5%</div>
+                            <div class="card-delta positive">Normal operating range</div>
+                        </div>
+                    </div>
+                    <div class="card glass-card kpi-card">
+                        <div class="kpi-icon rul"><i class="fa-solid fa-hourglass-half"></i></div>
+                        <div class="kpi-body">
+                            <div class="card-title">Remaining Useful Life</div>
+                            <div class="card-value" id="val-rul">3,420 <span class="unit">Hrs</span></div>
+                            <div class="card-delta">Estimated before failure</div>
+                        </div>
+                    </div>
+                    <div class="card glass-card kpi-card">
+                        <div class="kpi-icon alarm"><i class="fa-solid fa-shield-halved"></i></div>
+                        <div class="kpi-body">
+                            <div class="card-title">False Alarm Rate</div>
+                            <div class="card-value" id="val-falsealarm">0.05%</div>
+                            <div class="card-delta positive">AI correlation active</div>
+                        </div>
+                    </div>
+                    <div class="card glass-card kpi-card">
+                        <div class="kpi-icon prob"><i class="fa-solid fa-chart-simple"></i></div>
+                        <div class="kpi-body">
+                            <div class="card-title">Failure Probability</div>
+                            <div class="card-value" id="val-failprob">14%</div>
+                            <div class="card-delta">Next 30 day window</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="charts-row">
+                    <div class="card chart-container glass-card">
+                        <div class="card-header">
+                            <h3>Multi-Parameter Sensor Analysis</h3>
+                            <button class="btn-outline" onclick="refreshData()">Refresh Data</button>
+                        </div>
+                        <canvas id="sensorChart"></canvas>
+                    </div>
+
+                    <div class="card anomaly-container glass-card">
+                        <div class="card-header">
+                            <h3>Failure Probability Breakdown</h3>
+                        </div>
+                        <div class="radial-progress">
+                            <div class="circle">
+                                <div class="mask full">
+                                    <div class="fill"></div>
+                                </div>
+                                <div class="mask half">
+                                    <div class="fill"></div>
+                                    <div class="fill fix"></div>
+                                </div>
+                                <div class="inside-circle">
+                                    <span class="inside-value">14%</span>
+                                    <span class="inside-label">Risk Level</span>
+                                </div>
+                            </div>
+                        </div>
+                        <ul class="degradation-list">
+                            <li><span class="dot primary"></span> Temperature Anomaly <span class="dot-value">62%</span></li>
+                            <li><span class="dot secondary"></span> Vibration Wear <span class="dot-value">38%</span></li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="params-row">
+                    <div class="card glass-card param-card">
+                        <div class="param-icon temp"><i class="fa-solid fa-temperature-half"></i></div>
+                        <div class="param-info">
+                            <div class="param-label">Temperature</div>
+                            <div class="param-value" id="val-temperature">58.2 <span class="unit">C</span></div>
+                        </div>
+                    </div>
+                    <div class="card glass-card param-card">
+                        <div class="param-icon vib"><i class="fa-solid fa-wave-square"></i></div>
+                        <div class="param-info">
+                            <div class="param-label">Vibration</div>
+                            <div class="param-value" id="val-vibration">2.1 <span class="unit">mm/s</span></div>
+                        </div>
+                    </div>
+                    <div class="card glass-card param-card">
+                        <div class="param-icon curr"><i class="fa-solid fa-bolt"></i></div>
+                        <div class="param-info">
+                            <div class="param-label">Voltage (Avg)</div>
+                            <div class="param-value" id="val-current">-- <span class="unit">V</span></div>
+                        </div>
+                    </div>
+                    <div class="card glass-card param-card">
+                        <div class="param-icon press"><i class="fa-solid fa-gauge"></i></div>
+                        <div class="param-info">
+                            <div class="param-label">Rotational Speed</div>
+                            <div class="param-value" id="val-pressure">-- <span class="unit">RPM</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bottom-row">
+                    <div class="card glass-card alerts-card">
+                        <div class="card-header">
+                            <h3>Automated Maintenance Alerts</h3>
+                            <span class="badge">AI Generated</span>
+                        </div>
+                        <div class="alert-list" id="alert-list"></div>
+                    </div>
+
+                    <div class="card glass-card insight-card">
+                        <div class="card-header">
+                            <h3>AI Pattern Recognition</h3>
+                        </div>
+                        <div class="insight-item">
+                            <span class="insight-label">Model Status</span>
+                            <span class="insight-value online">Online</span>
+                        </div>
+                        <div class="insight-item">
+                            <span class="insight-label">Patterns Monitored</span>
+                            <span class="insight-value">4 Parameters</span>
+                        </div>
+                        <div class="insight-item">
+                            <span class="insight-label">Correlation Confidence</span>
+                            <span class="insight-value">94.2%</span>
+                        </div>
+                        <div class="insight-item">
+                            <span class="insight-label">Last Trained</span>
+                            <span class="insight-value">12 hours ago</span>
+                        </div>
+                        <div class="recommendation-box">
+                            <i class="fa-solid fa-lightbulb"></i>
+                            <p>Recommended action: schedule bearing inspection within 200 operating hours to avoid unplanned downtime.</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- MOTOR ASSETS -->
+            <div class="page-section" id="page-assets" style="display: none;">
+
+                <div class="summary-cards">
+                    <div class="card glass-card summary-card">
+                        <div class="summary-label">Total Motors</div>
+                        <div class="summary-value" id="sum-total">--</div>
+                        <i class="fa-solid fa-microchip summary-bg-icon"></i>
+                    </div>
+                    <div class="card glass-card summary-card">
+                        <div class="summary-label">Active</div>
+                        <div class="summary-value text-success" id="sum-active">--</div>
+                        <i class="fa-solid fa-bolt summary-bg-icon"></i>
+                    </div>
+                    <div class="card glass-card summary-card">
+                        <div class="summary-label">Idle</div>
+                        <div class="summary-value text-info" id="sum-idle">--</div>
+                        <i class="fa-solid fa-pause summary-bg-icon"></i>
+                    </div>
+                    <div class="card glass-card summary-card">
+                        <div class="summary-label">Maintenance</div>
+                        <div class="summary-value text-warning" id="sum-maintenance">--</div>
+                        <i class="fa-solid fa-screwdriver-wrench summary-bg-icon"></i>
+                    </div>
+                    <div class="card glass-card summary-card">
+                        <div class="summary-label">Stopped</div>
+                        <div class="summary-value text-danger" id="sum-stopped">--</div>
+                        <i class="fa-solid fa-circle-stop summary-bg-icon"></i>
+                    </div>
+                </div>
+
+                <div class="card glass-card table-card">
+                    <div class="table-toolbar">
+                        <div class="search-wrap small">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input type="text" id="asset-search" placeholder="Search motor ID or name..." onkeyup="renderMotorsTable()">
+                        </div>
+                        <select id="asset-status-filter" class="filter-select" onchange="renderMotorsTable()">
+                            <option value="all">All Status</option>
+                            <option value="Active">Active</option>
+                            <option value="Idle">Idle</option>
+                            <option value="Maintenance">Maintenance</option>
+                            <option value="Stopped">Stopped</option>
+                        </select>
+                        <button class="btn-outline" onclick="loadMotors()">Refresh</button>
+                    </div>
+
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Motor</th>
+                                <th>Status</th>
+                                <th>Health Score</th>
+                                <th>RUL (Hrs)</th>
+                                <th>Last Update</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody id="motors-table-body">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- SENSOR DATA -->
+            <div class="page-section" id="page-sensors" style="display: none;">
+                <div class="card glass-card table-card">
+                    <div class="card-header">
+                        <h3>Live Sensor Telemetry</h3>
+                        <button class="btn-outline" onclick="loadSensors()">Refresh</button>
+                    </div>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Motor</th>
+                                <th><i class="fa-solid fa-temperature-half"></i> Temp (C)</th>
+                                <th><i class="fa-solid fa-wave-square"></i> Vibration (mm/s)</th>
+                                <th><i class="fa-solid fa-bolt"></i> Current (A)</th>
+                                <th><i class="fa-solid fa-gauge"></i> Pressure (bar)</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sensors-table-body">
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="card glass-card chart-container" style="height: 300px; margin-top: 24px;">
+                    <div class="card-header">
+                        <h3>Historical Parameter Trend</h3>
+                    </div>
+                    <canvas id="sensorChartFull"></canvas>
+                </div>
+            </div>
+
+            <!-- AI ALERTS -->
+            <div class="page-section" id="page-alerts" style="display: none;">
+                <div class="card glass-card table-card">
+                    <div class="table-toolbar">
+                        <h3>AI Logs &amp; Advanced Diagnostics</h3>
+                        <select id="log-severity-filter" class="filter-select" onchange="renderLogsList()">
+                            <option value="all">All Severity</option>
+                            <option value="critical">Critical</option>
+                            <option value="warning">Warning</option>
+                            <option value="info">Info</option>
+                            <option value="safe">Resolved / Safe</option>
+                        </select>
+                        <button class="btn-outline" onclick="loadLogs()">Refresh</button>
+                    </div>
+                    <div class="log-list" id="logs-list"></div>
+                </div>
+            </div>
+
+            {% if is_admin %}
+            <!-- SETTINGS (admin only) -->
+            <div class="page-section" id="page-settings" style="display: none;">
+                <div class="settings-grid">
+                    <div class="card glass-card">
+                        <div class="card-header"><h3>Alert Thresholds</h3></div>
+                        <div class="setting-row">
+                            <label>Temperature Warning (C)</label>
+                            <input type="number" class="setting-input" value="75">
+                        </div>
+                        <div class="setting-row">
+                            <label>Vibration Warning (mm/s)</label>
+                            <input type="number" class="setting-input" value="3.5" step="0.1">
+                        </div>
+                        <div class="setting-row">
+                            <label>Current Deviation Limit (%)</label>
+                            <input type="number" class="setting-input" value="15">
+                        </div>
+                        <div class="setting-row">
+                            <label>Pressure Warning (bar)</label>
+                            <input type="number" class="setting-input" value="5.5" step="0.1">
+                        </div>
+                        <button class="btn-action" style="margin-top: 8px;" onclick="alert('Settings saved (placeholder).')">Save Thresholds</button>
+                    </div>
+
+                    <div class="card glass-card">
+                        <div class="card-header"><h3>AI Model Configuration</h3></div>
+                        <div class="setting-row toggle-row">
+                            <label>Enable False Alarm Reduction</label>
+                            <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+                        </div>
+                        <div class="setting-row toggle-row">
+                            <label>Enable Pattern Recognition</label>
+                            <label class="switch"><input type="checkbox" checked><span class="slider"></span></label>
+                        </div>
+                        <div class="setting-row toggle-row">
+                            <label>Auto-Generate Maintenance Plan</label>
+                            <label class="switch"><input type="checkbox"><span class="slider"></span></label>
+                        </div>
+                        <div class="setting-row">
+                            <label>Model Retrain Frequency</label>
+                            <select class="setting-input">
+                                <option>Every 6 hours</option>
+                                <option>Every 12 hours</option>
+                                <option selected>Every 24 hours</option>
+                                <option>Weekly</option>
+                            </select>
+                        </div>
+                        <button class="btn-action" style="margin-top: 8px;" onclick="alert('Configuration saved (placeholder).')">Save Configuration</button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+        </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>
