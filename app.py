@@ -80,6 +80,13 @@ SENSOR_STATUS_MAP = {
     "Failure": "Critical"
 }
 
+RECOMMENDATION_MAP = {
+    "Normal": "System operating normally. Continue routine monitoring.",
+    "Warning": "Early degradation detected. Schedule inspection within the next 200 operating hours.",
+    "Critical": "Significant degradation detected. Schedule maintenance within the next 48 hours.",
+    "Failure": "Immediate shutdown and inspection recommended to avoid unplanned downtime."
+}
+
 
 def get_avg_voltage(row):
     return round((row["Voltage_L1"] + row["Voltage_L2"] + row["Voltage_L3"]) / 3.0, 1)
@@ -103,11 +110,19 @@ def predict_row(row):
     predicted_rul = float(reg.predict(features_scaled)[0])
     predicted_rul = min(predicted_rul, RUL_DISPLAY_CAP)
 
+    rul_days = predicted_rul / 24
+    if rul_days <= 30:
+        risk_window_label = f"Estimated within {round(rul_days)} days"
+    else:
+        risk_window_label = "Beyond 30-day horizon"
+
     return {
         "condition_label": pred_label,
         "health_score": round(health_score, 1),
         "failure_probability": failure_probability,
-        "rul_hours": round(predicted_rul, 1)
+        "rul_hours": round(predicted_rul, 1),
+        "risk_window_label": risk_window_label,
+        "recommendation": RECOMMENDATION_MAP.get(pred_label, RECOMMENDATION_MAP["Normal"])
     }
 
 
@@ -145,6 +160,8 @@ def get_status():
         "health_score": prediction["health_score"],
         "rul_hours": prediction["rul_hours"],
         "failure_probability": prediction["failure_probability"],
+        "risk_window_label": prediction["risk_window_label"],
+        "recommendation": prediction["recommendation"],
         "false_alarm_rate": 0.02,
         "temperature": float(row["Temperature"]),
         "vibration": get_vibration_rms(row),
@@ -181,33 +198,37 @@ def get_alerts():
     for _, row in rows.iterrows():
         prediction = predict_row(row)
         label = prediction["condition_label"]
+        device_id_str = str(row["motor_id"])
 
         if label == "Critical":
             alerts.append({
                 "type": "warning",
                 "icon": "fa-temperature-high",
-                "title": f"Critical Pattern Detected on {row['motor_id']}",
+                "title": f"Critical Pattern Detected on {device_id_str}",
                 "description": "Sensor pattern matches critical degradation signature identified by the AI model.",
                 "time": "Just now",
-                "action": "Investigate"
+                "action": "Investigate",
+                "device_id": device_id_str
             })
         elif label == "Failure":
             alerts.append({
                 "type": "warning",
                 "icon": "fa-circle-exclamation",
-                "title": f"Failure Risk on {row['motor_id']}",
+                "title": f"Failure Risk on {device_id_str}",
                 "description": "Model predicts imminent failure risk based on current sensor readings.",
                 "time": "Just now",
-                "action": "Investigate"
+                "action": "Investigate",
+                "device_id": device_id_str
             })
         elif label == "Warning":
             alerts.append({
                 "type": "info",
                 "icon": "fa-chart-line",
-                "title": f"Early Degradation Signs on {row['motor_id']}",
+                "title": f"Early Degradation Signs on {device_id_str}",
                 "description": "Maintenance recommended within the next scheduled window.",
                 "time": "Just now",
-                "action": "View Plan"
+                "action": "View Plan",
+                "device_id": device_id_str
             })
 
     if not alerts:
@@ -217,7 +238,8 @@ def get_alerts():
             "title": "All Motors Normal",
             "description": "No degradation patterns detected across monitored motors.",
             "time": "Just now",
-            "action": None
+            "action": None,
+            "device_id": None
         })
 
     return jsonify(alerts[:20])
@@ -310,6 +332,7 @@ def get_logs():
             "title": title_map.get(label, "Status Update"),
             "description": f"Predicted condition: {label}. Estimated RUL: {int(prediction['rul_hours'])} hours.",
             "device": f"Induction Motor {row['motor_id']}",
+            "device_id": str(row["motor_id"]),
             "time": row["timestamp"].strftime("%Y-%m-%d %H:%M")
         })
 
@@ -366,6 +389,8 @@ def generate_report():
             table_data.append(["Health Score", f"{prediction['health_score']}%"])
             table_data.append(["Estimated RUL", f"{prediction['rul_hours']} hours"])
             table_data.append(["Failure Probability", f"{prediction['failure_probability']}%"])
+            table_data.append(["Risk Window", prediction["risk_window_label"]])
+            table_data.append(["Recommendation", prediction["recommendation"]])
 
         t = Table(table_data, colWidths=[8*cm, 8*cm])
         t.setStyle(TableStyle([

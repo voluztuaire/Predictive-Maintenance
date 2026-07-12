@@ -19,32 +19,32 @@
         </div>
 
         <ul class="nav-menu">
-            <li class="nav-item active" onclick="switchTab('dashboard')">
+            <li class="nav-item active" data-tab="dashboard" onclick="switchTab('dashboard', this)">
                 <a href="#dashboard">
                     <span class="icon"><i class="fa-solid fa-chart-pie"></i></span>
                     <span class="text">Dashboard</span>
                 </a>
             </li>
-            <li class="nav-item" onclick="switchTab('assets')">
+            <li class="nav-item" data-tab="assets" onclick="switchTab('assets', this)">
                 <a href="#assets">
                     <span class="icon"><i class="fa-solid fa-microchip"></i></span>
                     <span class="text">Motor Assets</span>
                 </a>
             </li>
-            <li class="nav-item" onclick="switchTab('sensors')">
+            <li class="nav-item" data-tab="sensors" onclick="switchTab('sensors', this)">
                 <a href="#sensors">
                     <span class="icon"><i class="fa-solid fa-wave-square"></i></span>
                     <span class="text">Sensor Data</span>
                 </a>
             </li>
-            <li class="nav-item" onclick="switchTab('alerts')">
+            <li class="nav-item" data-tab="alerts" onclick="switchTab('alerts', this)">
                 <a href="#alerts">
                     <span class="icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
                     <span class="text">AI Alerts</span>
                 </a>
             </li>
             {% if is_admin %}
-            <li class="nav-item" onclick="switchTab('settings')">
+            <li class="nav-item" data-tab="settings" onclick="switchTab('settings', this)">
                 <a href="#settings">
                     <span class="icon"><i class="fa-solid fa-gear"></i></span>
                     <span class="text">Settings</span>
@@ -103,7 +103,7 @@
                         <div class="kpi-body">
                             <div class="card-title">Real-time Health Score</div>
                             <div class="card-value" id="val-health">88.5%</div>
-                            <div class="card-delta positive">Normal operating range</div>
+                            <div class="card-delta positive" id="val-health-note">Normal operating range</div>
                         </div>
                     </div>
                     <div class="card glass-card kpi-card">
@@ -127,18 +127,25 @@
                         <div class="kpi-body">
                             <div class="card-title">Failure Probability</div>
                             <div class="card-value" id="val-failprob">14%</div>
-                            <div class="card-delta">Next 30 day window</div>
+                            <div class="card-delta" id="val-failprob-window">Based on current sensor pattern</div>
                         </div>
                     </div>
                 </div>
 
                 <div class="charts-row">
-                    <div class="card chart-container glass-card">
+                    <div class="card chart-container glass-card" id="sensor-chart-container">
                         <div class="card-header">
                             <h3>Multi-Parameter Sensor Analysis</h3>
-                            <button class="btn-outline" onclick="refreshData()">Refresh Data</button>
+                            <div class="card-header-actions">
+                                <button class="btn-outline" onclick="refreshData()">Refresh Data</button>
+                                <button class="icon-toggle-btn" onclick="toggleChart('sensor-chart-container', this)" title="Collapse/Expand">
+                                    <i class="fa-solid fa-chevron-up"></i>
+                                </button>
+                            </div>
                         </div>
-                        <canvas id="sensorChart"></canvas>
+                        <div class="chart-body">
+                            <canvas id="sensorChart"></canvas>
+                        </div>
                     </div>
 
                     <div class="card anomaly-container glass-card">
@@ -155,7 +162,7 @@
                                     <div class="fill fix"></div>
                                 </div>
                                 <div class="inside-circle">
-                                    <span class="inside-value">14%</span>
+                                    <span class="inside-value" id="val-risklevel">14%</span>
                                     <span class="inside-label">Risk Level</span>
                                 </div>
                             </div>
@@ -167,38 +174,77 @@
                     </div>
                 </div>
 
-                <div class="params-row">
-                    <div class="card glass-card param-card">
-                        <div class="param-icon temp"><i class="fa-solid fa-temperature-half"></i></div>
-                        <div class="param-info">
-                            <div class="param-label">Temperature</div>
-                            <div class="param-value" id="val-temperature">58.2 <span class="unit">C</span></div>
+                <div class="params-row-wrapper">
+                    <div class="params-row">
+                        <div class="card glass-card param-card">
+                            <div class="param-icon temp"><i class="fa-solid fa-temperature-half"></i></div>
+                            <div class="param-info">
+                                <div class="param-label">Temperature</div>
+                                <div class="param-value" id="val-temperature">58.2 <span class="unit">C</span></div>
+                            </div>
+                            <div class="spark-wrap">
+                                <canvas id="spark-temp"></canvas>
+                            </div>
+                            <button class="param-expand-btn" onclick="toggleParamDetail('temp', this)">
+                                <i class="fa-solid fa-chevron-down"></i>
+                            </button>
                         </div>
-                        <canvas id="spark-temp" style="width:70px;height:36px;flex-shrink:0;"></canvas>
+
+                        <div class="card glass-card param-card">
+                            <div class="param-icon vib"><i class="fa-solid fa-wave-square"></i></div>
+                            <div class="param-info">
+                                <div class="param-label">Vibration</div>
+                                <div class="param-value" id="val-vibration">2.1 <span class="unit">mm/s</span></div>
+                            </div>
+                            <div class="spark-wrap">
+                                <canvas id="spark-vib"></canvas>
+                            </div>
+                            <button class="param-expand-btn" onclick="toggleParamDetail('vib', this)">
+                                <i class="fa-solid fa-chevron-down"></i>
+                            </button>
+                        </div>
+
+                        <div class="card glass-card param-card">
+                            <div class="param-icon curr"><i class="fa-solid fa-bolt"></i></div>
+                            <div class="param-info">
+                                <div class="param-label">Voltage (Avg)</div>
+                                <div class="param-value" id="val-current">-- <span class="unit">V</span></div>
+                            </div>
+                            <div class="spark-wrap">
+                                <canvas id="spark-volt"></canvas>
+                            </div>
+                            <button class="param-expand-btn" onclick="toggleParamDetail('volt', this)">
+                                <i class="fa-solid fa-chevron-down"></i>
+                            </button>
+                        </div>
+
+                        <div class="card glass-card param-card">
+                            <div class="param-icon press"><i class="fa-solid fa-gauge"></i></div>
+                            <div class="param-info">
+                                <div class="param-label">Rotational Speed</div>
+                                <div class="param-value" id="val-pressure">-- <span class="unit">RPM</span></div>
+                            </div>
+                            <div class="spark-wrap">
+                                <canvas id="spark-rpm"></canvas>
+                            </div>
+                            <button class="param-expand-btn" onclick="toggleParamDetail('rpm', this)">
+                                <i class="fa-solid fa-chevron-down"></i>
+                            </button>
+                        </div>
                     </div>
-                    <div class="card glass-card param-card">
-                        <div class="param-icon vib"><i class="fa-solid fa-wave-square"></i></div>
-                        <div class="param-info">
-                            <div class="param-label">Vibration</div>
-                            <div class="param-value" id="val-vibration">2.1 <span class="unit">mm/s</span></div>
-                        </div>
-                        <canvas id="spark-vib" style="width:70px;height:36px;flex-shrink:0;"></canvas>
+
+                    <!-- Detail panels -->
+                    <div class="param-detail-panel" id="detail-temp">
+                        <canvas id="spark-temp-full"></canvas>
                     </div>
-                    <div class="card glass-card param-card">
-                        <div class="param-icon curr"><i class="fa-solid fa-bolt"></i></div>
-                        <div class="param-info">
-                            <div class="param-label">Voltage (Avg)</div>
-                            <div class="param-value" id="val-current">-- <span class="unit">V</span></div>
-                        </div>
-                        <canvas id="spark-volt" style="width:70px;height:36px;flex-shrink:0;"></canvas>
+                    <div class="param-detail-panel" id="detail-vib">
+                        <canvas id="spark-vib-full"></canvas>
                     </div>
-                    <div class="card glass-card param-card">
-                        <div class="param-icon press"><i class="fa-solid fa-gauge"></i></div>
-                        <div class="param-info">
-                            <div class="param-label">Rotational Speed</div>
-                            <div class="param-value" id="val-pressure">-- <span class="unit">RPM</span></div>
-                        </div>
-                        <canvas id="spark-rpm" style="width:70px;height:36px;flex-shrink:0;"></canvas>
+                    <div class="param-detail-panel" id="detail-volt">
+                        <canvas id="spark-volt-full"></canvas>
+                    </div>
+                    <div class="param-detail-panel" id="detail-rpm">
+                        <canvas id="spark-rpm-full"></canvas>
                     </div>
                 </div>
 
@@ -233,7 +279,7 @@
                         </div>
                         <div class="recommendation-box">
                             <i class="fa-solid fa-lightbulb"></i>
-                            <p>Recommended action: schedule bearing inspection within 200 operating hours to avoid unplanned downtime.</p>
+                            <p id="val-recommendation">Recommended action: schedule bearing inspection within 200 operating hours to avoid unplanned downtime.</p>
                         </div>
                     </div>
                 </div>
@@ -327,11 +373,18 @@
                     </table>
                 </div>
 
-                <div class="card glass-card chart-container" style="height: 300px; margin-top: 24px;">
+                <div class="card glass-card chart-container" id="full-chart-container" style="height: 300px; margin-top: 24px;">
                     <div class="card-header">
                         <h3>Historical Parameter Trend</h3>
+                        <div class="card-header-actions">
+                            <button class="icon-toggle-btn" onclick="toggleChart('full-chart-container', this)" title="Collapse/Expand">
+                                <i class="fa-solid fa-chevron-up"></i>
+                            </button>
+                        </div>
                     </div>
-                    <canvas id="sensorChartFull"></canvas>
+                    <div class="chart-body">
+                        <canvas id="sensorChartFull"></canvas>
+                    </div>
                 </div>
             </div>
 
@@ -411,33 +464,52 @@
     </div>
 
     <!-- REPORT GENERATOR MODAL -->
-    <div id="report-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:100; align-items:center; justify-content:center;">
-        <div class="card glass-card" style="width:420px; padding:24px;">
-            <h3 style="margin-bottom:16px;">Generate Report</h3>
-
-            <div class="setting-row">
-                <label>Select Motors</label>
-                <select id="report-motors" multiple style="width:100%; height:100px; background:var(--bg-card); color:var(--text-main); border:1px solid var(--border-color); border-radius:8px; padding:8px;"></select>
+    <div id="report-modal" class="modal-overlay">
+        <div class="card glass-card report-modal-card">
+            <div class="report-modal-header">
+                <h3>Generate Report</h3>
+                <button class="report-modal-close" onclick="closeReportModal()"><i class="fa-solid fa-xmark"></i></button>
             </div>
 
-            <div class="setting-row">
-                <label>Include Fields</label>
-                <div style="display:flex; flex-wrap:wrap; gap:10px; font-size:12px; color:var(--text-main);">
-                    <label><input type="checkbox" class="report-field" value="temperature" checked> Temperature</label>
-                    <label><input type="checkbox" class="report-field" value="vibration" checked> Vibration</label>
-                    <label><input type="checkbox" class="report-field" value="voltage" checked> Voltage</label>
-                    <label><input type="checkbox" class="report-field" value="rpm" checked> Rotational Speed</label>
+            <div class="report-modal-body">
+                <div class="report-section-label">
+                    <span>Select Motors</span>
+                    <div>
+                        <button class="link-btn" onclick="toggleAllMotors(true)">Select All</button>
+                        <button class="link-btn" onclick="toggleAllMotors(false)">Clear</button>
+                    </div>
+                </div>
+                <div id="motor-picker-list" class="motor-picker-list"></div>
+
+                <div class="report-section-label">Include Fields</div>
+                <div class="report-fields-grid">
+                    <label class="report-field-item">
+                        <input type="checkbox" class="round-check report-field" value="temperature" checked>
+                        Temperature
+                    </label>
+                    <label class="report-field-item">
+                        <input type="checkbox" class="round-check report-field" value="vibration" checked>
+                        Vibration
+                    </label>
+                    <label class="report-field-item">
+                        <input type="checkbox" class="round-check report-field" value="voltage" checked>
+                        Voltage
+                    </label>
+                    <label class="report-field-item">
+                        <input type="checkbox" class="round-check report-field" value="rpm" checked>
+                        Rotational Speed
+                    </label>
+                </div>
+
+                <div class="setting-row toggle-row" style="margin-bottom:0;">
+                    <label>Include AI Predictions</label>
+                    <label class="switch"><input type="checkbox" id="report-predictions" checked><span class="slider"></span></label>
                 </div>
             </div>
 
-            <div class="setting-row toggle-row">
-                <label>Include AI Predictions</label>
-                <label class="switch"><input type="checkbox" id="report-predictions" checked><span class="slider"></span></label>
-            </div>
-
-            <div style="display:flex; gap:10px; margin-top:16px;">
-                <button class="btn-outline" style="flex:1;" onclick="closeReportModal()">Cancel</button>
-                <button class="btn-action" style="flex:1;" onclick="submitReport()">Download PDF</button>
+            <div class="report-modal-footer">
+                <button class="btn-outline" onclick="closeReportModal()">Cancel</button>
+                <button class="btn-action" onclick="submitReport()">Download PDF</button>
             </div>
         </div>
     </div>

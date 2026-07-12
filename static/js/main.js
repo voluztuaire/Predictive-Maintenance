@@ -3,6 +3,8 @@ let sensorChartFullInstance = null;
 let motorsCache = [];
 let logsCache = [];
 let currentDevice = null;
+let expandedParam = null;
+let fullSparkCharts = {};
 
 document.addEventListener("DOMContentLoaded", () => {
     initChart();
@@ -58,7 +60,79 @@ function initFullChart() {
     });
 }
 
-/* DEVICE LIST - populated from the CSV via backend, no hardcoded options */
+/* COLLAPSIBLE CHART SECTIONS */
+function toggleChart(containerId, btnEl) {
+    const container = document.getElementById(containerId);
+    container.classList.toggle('collapsed');
+    const icon = btnEl.querySelector('i');
+    if (container.classList.contains('collapsed')) {
+        icon.classList.remove('fa-chevron-up');
+        icon.classList.add('fa-chevron-down');
+    } else {
+        icon.classList.remove('fa-chevron-down');
+        icon.classList.add('fa-chevron-up');
+    }
+}
+
+/* PARAM DETAIL TOGGLE */
+function toggleParamDetail(paramKey, btnEl) {
+    const panel = document.getElementById('detail-' + paramKey);
+    const isOpen = panel.classList.contains('open');
+
+    document.querySelectorAll('.param-detail-panel').forEach(p => p.classList.remove('open'));
+    document.querySelectorAll('.param-expand-btn').forEach(b => b.classList.remove('open'));
+
+    if (!isOpen) {
+        panel.classList.add('open');
+        btnEl.classList.add('open');
+        expandedParam = paramKey;
+        renderFullSpark(paramKey);
+    } else {
+        expandedParam = null;
+    }
+}
+
+function renderFullSpark(paramKey) {
+    const url = currentDevice ? `/api/history?device=${encodeURIComponent(currentDevice)}&points=30` : '/api/history?points=30';
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            const colorMap = { temp: '#f97316', vib: '#a855f7', volt: '#38bdf8', rpm: '#22c55e' };
+            const fieldMap = { temp: 'temperature', vib: 'vibration', volt: 'voltage', rpm: 'rpm' };
+            const canvasId = 'spark-' + paramKey + '-full';
+
+            if (fullSparkCharts[canvasId]) fullSparkCharts[canvasId].destroy();
+
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            fullSparkCharts[canvasId] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [{
+                        data: data[fieldMap[paramKey]],
+                        borderColor: colorMap[paramKey],
+                        backgroundColor: colorMap[paramKey] + '22',
+                        borderWidth: 2,
+                        tension: 0.4,
+                        fill: true,
+                        pointRadius: 3
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        x: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' } },
+                        y: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' } }
+                    }
+                }
+            });
+        })
+        .catch(error => console.error('Error loading full sparkline:', error));
+}
+
+/* DEVICE LIST */
 function loadDevices() {
     fetch('/api/devices')
         .then(r => r.json())
@@ -89,13 +163,32 @@ function fetchAndUpdateMetrics() {
             document.getElementById('val-rul').innerHTML = data.rul_hours.toLocaleString() + ' <span class="unit">Hrs</span>';
             document.getElementById('val-falsealarm').innerText = data.false_alarm_rate + "%";
             document.getElementById('val-failprob').innerText = data.failure_probability + "%";
+            document.getElementById('val-failprob-window').innerText = data.risk_window_label || 'Based on current sensor pattern';
+            document.getElementById('val-risklevel').innerText = data.failure_probability + "%";
             document.getElementById('val-temperature').innerHTML = data.temperature + ' <span class="unit">C</span>';
             document.getElementById('val-vibration').innerHTML = data.vibration + ' <span class="unit">mm/s</span>';
             document.getElementById('val-current').innerHTML = data.current + ' <span class="unit">A</span>';
             document.getElementById('val-pressure').innerHTML = data.pressure + ' <span class="unit">bar</span>';
+            document.getElementById('val-recommendation').innerText = data.recommendation || 'System operating within normal parameters.';
+
+            const healthNote = document.getElementById('val-health-note');
+            if (data.health_score >= 70) {
+                healthNote.innerText = 'Normal operating range';
+                healthNote.className = 'card-delta positive';
+            } else if (data.health_score >= 40) {
+                healthNote.innerText = 'Reduced performance detected';
+                healthNote.className = 'card-delta';
+            } else {
+                healthNote.innerText = 'Immediate attention required';
+                healthNote.className = 'card-delta';
+                healthNote.style.color = 'var(--danger)';
+            }
 
             currentDevice = data.device;
             loadSparklines();
+            
+            // Re-render full spark if expanded
+            if (expandedParam) renderFullSpark(expandedParam);
         })
         .catch(error => console.error('Error updating status:', error));
 }
@@ -118,7 +211,7 @@ function fetchAndRenderAlerts() {
                     </div>
                     <div class="alert-action">
                         <span class="time">${a.time}</span>
-                        ${a.action ? `<button class="btn-action" onclick="investigateAlert()">${a.action}</button>` : ''}
+                        ${a.action ? `<button class="btn-action" onclick="investigateAlert('${a.device_id || ''}')">${a.action}</button>` : ''}
                     </div>`;
                 container.appendChild(row);
             });
@@ -188,7 +281,7 @@ function renderMotorsTable() {
             </td>
             <td>${m.rul_hours.toLocaleString()}</td>
             <td>${m.last_update}</td>
-            <td><button class="row-action-btn" onclick="investigateAlert()"><i class="fa-solid fa-chevron-right"></i></button></td>
+            <td><button class="row-action-btn" onclick="investigateAlert('${m.id}')" title="View details"><i class="fa-solid fa-chevron-right"></i></button></td>
         `;
         body.appendChild(tr);
     });
@@ -265,15 +358,20 @@ function renderLogsList() {
 }
 
 /* TAB SWITCHING */
-function switchTab(tabName) {
+function switchTab(tabName, navEl) {
     const items = document.querySelectorAll('.nav-item');
     items.forEach(item => item.classList.remove('active'));
-    event.currentTarget.classList.add('active');
+    if (navEl) {
+        navEl.classList.add('active');
+    } else {
+        const target = document.querySelector(`.nav-item[data-tab="${tabName}"]`);
+        if (target) target.classList.add('active');
+    }
 
     const pages = ['dashboard', 'assets', 'sensors', 'alerts', 'settings'];
     pages.forEach(page => {
         const el = document.getElementById('page-' + page);
-        if (el) el.style.display = (page === tabName) ? (page === 'dashboard' ? 'flex' : 'flex') : 'none';
+        if (el) el.style.display = (page === tabName) ? 'flex' : 'none';
     });
 
     if (tabName === 'sensors') initFullChart();
@@ -291,16 +389,29 @@ function refreshData() {
 }
 
 function triggerBell() { alert("Placeholder notification action triggered."); }
-function investigateAlert() { alert("Navigating to AI pattern degradation logs."); }
 
-/* SPARKLINE CHARTS (per-parameter trend, shown as small charts on each stat card) */
+function investigateAlert(deviceId) {
+    if (deviceId) {
+        selectDevice(deviceId);
+        const select = document.getElementById('device-select');
+        select.value = deviceId;
+        switchTab('sensors');
+    } else {
+        switchTab('alerts');
+    }
+}
+
+/* SPARKLINE CHARTS */
 let sparklineCharts = {};
 
 function renderSparkline(canvasId, labels, data, color) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    
     if (sparklineCharts[canvasId]) {
         sparklineCharts[canvasId].destroy();
     }
-    const ctx = document.getElementById(canvasId).getContext('2d');
+    const ctx = canvas.getContext('2d');
     sparklineCharts[canvasId] = new Chart(ctx, {
         type: 'line',
         data: {
@@ -328,7 +439,7 @@ function renderSparkline(canvasId, labels, data, color) {
 }
 
 function loadSparklines() {
-    const url = currentDevice ? `/api/history?device=${encodeURIComponent(currentDevice)}` : '/api/history';
+    const url = currentDevice ? `/api/history?device=${encodeURIComponent(currentDevice)}&points=20` : '/api/history?points=20';
     fetch(url)
         .then(r => r.json())
         .then(data => {
@@ -340,35 +451,45 @@ function loadSparklines() {
         .catch(error => console.error('Error loading sparklines:', error));
 }
 
-/* REPORT GENERATOR (PDF download with custom motor/field selection) */
+/* REPORT GENERATOR */
 function openReportModal() {
-    const select = document.getElementById('report-motors');
-    select.innerHTML = '';
+    const list = document.getElementById('motor-picker-list');
+    list.innerHTML = '';
     fetch('/api/devices')
         .then(r => r.json())
         .then(data => {
             data.devices.forEach(id => {
-                const opt = document.createElement('option');
-                opt.value = id;
-                opt.text = id;
-                opt.selected = true;
-                select.appendChild(opt);
+                const item = document.createElement('label');
+                item.className = 'motor-picker-item';
+                item.innerHTML = `
+                    <input type="checkbox" class="round-check report-motor-check" value="${id}">
+                    <span>${id}</span>
+                `;
+                list.appendChild(item);
             });
         });
-    document.getElementById('report-modal').style.display = 'flex';
+    document.getElementById('report-modal').classList.add('open');
 }
 
 function closeReportModal() {
-    document.getElementById('report-modal').style.display = 'none';
+    document.getElementById('report-modal').classList.remove('open');
+}
+
+function toggleAllMotors(checked) {
+    document.querySelectorAll('.report-motor-check').forEach(cb => cb.checked = checked);
 }
 
 function submitReport() {
-    const motors = Array.from(document.getElementById('report-motors').selectedOptions).map(o => o.value);
+    const motors = Array.from(document.querySelectorAll('.report-motor-check:checked')).map(cb => cb.value);
     const fields = Array.from(document.querySelectorAll('.report-field:checked')).map(cb => cb.value);
     const includePredictions = document.getElementById('report-predictions').checked;
 
     if (motors.length === 0) {
         alert("Please select at least one motor.");
+        return;
+    }
+    if (fields.length === 0) {
+        alert("Please select at least one field to include.");
         return;
     }
 
