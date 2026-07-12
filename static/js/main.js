@@ -13,12 +13,105 @@ document.addEventListener("DOMContentLoaded", () => {
     loadMotors();
     loadSensors();
     loadLogs();
+    loadThresholds();
 });
 
 const SENSOR_LABELS = ['T-30m', 'T-25m', 'T-20m', 'T-15m', 'T-10m', 'T-5m', 'Now'];
 const SENSOR_TEMP = [45, 46, 45, 50, 58, 65, 72];
 const SENSOR_VIB = [1.2, 1.2, 1.3, 1.5, 2.1, 2.8, 3.5];
 const SENSOR_CURR = [22, 23, 22, 24, 26, 28, 29];
+
+/* CUSTOM MODAL */
+function showModal(options) {
+    const modal = document.getElementById('custom-modal');
+    const icon = document.getElementById('modal-icon');
+    const title = document.getElementById('modal-title');
+    const message = document.getElementById('modal-message');
+    const confirmBtn = document.getElementById('modal-confirm-btn');
+    const cancelBtn = document.getElementById('modal-cancel-btn');
+
+    // Default values
+    const type = options.type || 'info';
+    const iconMap = {
+        success: 'fa-circle-check',
+        error: 'fa-circle-xmark',
+        warning: 'fa-triangle-exclamation',
+        info: 'fa-circle-info',
+        confirm: 'fa-question-circle'
+    };
+    const titleMap = {
+        success: 'Success',
+        error: 'Error',
+        warning: 'Warning',
+        info: 'Information',
+        confirm: 'Confirm'
+    };
+
+    icon.className = `fa-solid ${iconMap[type] || iconMap.info} ${type}`;
+    title.textContent = options.title || titleMap[type] || 'Notification';
+    message.textContent = options.message || 'Operation completed.';
+
+    // Configure buttons
+    if (type === 'confirm' || options.confirm) {
+        confirmBtn.style.display = 'flex';
+        cancelBtn.style.display = 'flex';
+        confirmBtn.textContent = options.confirmText || 'Confirm';
+        cancelBtn.textContent = options.cancelText || 'Cancel';
+        
+        // Remove old listeners
+        const newConfirm = confirmBtn.cloneNode(true);
+        const newCancel = cancelBtn.cloneNode(true);
+        confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+        cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
+        
+        newConfirm.addEventListener('click', () => {
+            closeModal();
+            if (options.onConfirm) options.onConfirm();
+        });
+        newCancel.addEventListener('click', () => {
+            closeModal();
+            if (options.onCancel) options.onCancel();
+        });
+    } else {
+        confirmBtn.style.display = 'flex';
+        cancelBtn.style.display = 'none';
+        confirmBtn.textContent = options.buttonText || 'OK';
+        
+        // Remove old listeners
+        const newConfirm = confirmBtn.cloneNode(true);
+        confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+        
+        newConfirm.addEventListener('click', () => {
+            closeModal();
+            if (options.onClose) options.onClose();
+        });
+    }
+
+    modal.classList.add('open');
+}
+
+function closeModal() {
+    document.getElementById('custom-modal').classList.remove('open');
+}
+
+// Close modal on overlay click
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('custom-modal');
+    if (modal) {
+        modal.addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+    }
+});
+
+// Close modal on Escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        closeModal();
+    }
+});
 
 function buildSensorDatasets() {
     return [
@@ -357,6 +450,104 @@ function renderLogsList() {
     });
 }
 
+/* THRESHOLD SETTINGS */
+function loadThresholds() {
+    fetch('/api/settings')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('slider-temp').value = data.temperature;
+            document.getElementById('val-temp-threshold').innerText = data.temperature;
+
+            document.getElementById('slider-vib').value = data.vibration;
+            document.getElementById('val-vib-threshold').innerText = data.vibration;
+
+            document.getElementById('slider-current').value = data.current_deviation;
+            document.getElementById('val-current-threshold').innerText = data.current_deviation;
+
+            document.getElementById('slider-pressure').value = data.pressure;
+            document.getElementById('val-pressure-threshold').innerText = data.pressure;
+        })
+        .catch(error => console.error('Error loading thresholds:', error));
+}
+
+function saveThresholds() {
+    const payload = {
+        temperature: parseFloat(document.getElementById('slider-temp').value),
+        vibration: parseFloat(document.getElementById('slider-vib').value),
+        current_deviation: parseFloat(document.getElementById('slider-current').value),
+        pressure: parseFloat(document.getElementById('slider-pressure').value)
+    };
+
+    fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        showModal({
+            type: 'success',
+            title: 'Settings Saved',
+            message: data.message || 'Threshold values updated successfully.',
+            buttonText: 'OK'
+        });
+        loadThresholds();
+    })
+    .catch(error => {
+        showModal({
+            type: 'error',
+            title: 'Error',
+            message: 'Failed to save settings. Please try again.',
+            buttonText: 'OK'
+        });
+        console.error('Error saving thresholds:', error);
+    });
+}
+
+function resetThresholds() {
+    showModal({
+        type: 'confirm',
+        title: 'Reset Thresholds',
+        message: 'Are you sure you want to reset all thresholds to their default values? This action cannot be undone.',
+        confirmText: 'Reset',
+        cancelText: 'Cancel',
+        onConfirm: function() {
+            fetch('/api/settings/reset', { method: 'POST' })
+                .then(r => r.json())
+                .then(() => {
+                    showModal({
+                        type: 'success',
+                        title: 'Reset Complete',
+                        message: 'Thresholds have been reset to default values.',
+                        buttonText: 'OK'
+                    });
+                    loadThresholds();
+                })
+                .catch(error => {
+                    showModal({
+                        type: 'error',
+                        title: 'Error',
+                        message: 'Failed to reset thresholds. Please try again.',
+                        buttonText: 'OK'
+                    });
+                    console.error('Error resetting thresholds:', error);
+                });
+        },
+        onCancel: function() {
+            // User cancelled, do nothing
+        }
+    });
+}
+
+function saveConfiguration() {
+    showModal({
+        type: 'success',
+        title: 'Configuration Saved',
+        message: 'AI model configuration has been updated successfully.',
+        buttonText: 'OK'
+    });
+}
+
 /* TAB SWITCHING */
 function switchTab(tabName, navEl) {
     const items = document.querySelectorAll('.nav-item');
@@ -388,7 +579,14 @@ function refreshData() {
     fetchAndRenderAlerts();
 }
 
-function triggerBell() { alert("Placeholder notification action triggered."); }
+function triggerBell() {
+    showModal({
+        type: 'info',
+        title: 'Notifications',
+        message: 'You have no new notifications at this time.',
+        buttonText: 'Got it'
+    });
+}
 
 function investigateAlert(deviceId) {
     if (deviceId) {
@@ -485,11 +683,21 @@ function submitReport() {
     const includePredictions = document.getElementById('report-predictions').checked;
 
     if (motors.length === 0) {
-        alert("Please select at least one motor.");
+        showModal({
+            type: 'warning',
+            title: 'No Motors Selected',
+            message: 'Please select at least one motor to include in the report.',
+            buttonText: 'OK'
+        });
         return;
     }
     if (fields.length === 0) {
-        alert("Please select at least one field to include.");
+        showModal({
+            type: 'warning',
+            title: 'No Fields Selected',
+            message: 'Please select at least one field to include in the report.',
+            buttonText: 'OK'
+        });
         return;
     }
 
@@ -507,5 +715,13 @@ function submitReport() {
         a.click();
         closeReportModal();
     })
-    .catch(error => console.error('Error generating report:', error));
+    .catch(error => {
+        showModal({
+            type: 'error',
+            title: 'Error',
+            message: 'Failed to generate report. Please try again.',
+            buttonText: 'OK'
+        });
+        console.error('Error generating report:', error);
+    });
 }

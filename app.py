@@ -16,7 +16,7 @@ from reportlab.lib.units import cm
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
-from models import db, User
+from models import db, User, Threshold, DEFAULT_THRESHOLDS
 from auth import auth_bp
 
 app = Flask(__name__)
@@ -339,12 +339,46 @@ def get_logs():
     return jsonify(logs)
 
 
-@app.route("/api/settings", methods=["POST"])
+@app.route("/api/settings", methods=["GET", "POST"])
 @login_required
 def update_settings():
+    threshold = Threshold.query.first()
+
+    if request.method == "GET":
+        return jsonify({
+            "temperature": threshold.temperature,
+            "vibration": threshold.vibration,
+            "current_deviation": threshold.current_deviation,
+            "pressure": threshold.pressure
+        })
+
     if not current_user.is_admin:
         return jsonify({"error": "Forbidden: admin access required"}), 403
+
+    payload = request.get_json()
+    threshold.temperature = payload.get("temperature", threshold.temperature)
+    threshold.vibration = payload.get("vibration", threshold.vibration)
+    threshold.current_deviation = payload.get("current_deviation", threshold.current_deviation)
+    threshold.pressure = payload.get("pressure", threshold.pressure)
+    db.session.commit()
+
     return jsonify({"message": "Settings saved."})
+
+
+@app.route("/api/settings/reset", methods=["POST"])
+@login_required
+def reset_settings():
+    if not current_user.is_admin:
+        return jsonify({"error": "Forbidden: admin access required"}), 403
+
+    threshold = Threshold.query.first()
+    threshold.temperature = DEFAULT_THRESHOLDS["temperature"]
+    threshold.vibration = DEFAULT_THRESHOLDS["vibration"]
+    threshold.current_deviation = DEFAULT_THRESHOLDS["current_deviation"]
+    threshold.pressure = DEFAULT_THRESHOLDS["pressure"]
+    db.session.commit()
+
+    return jsonify(DEFAULT_THRESHOLDS)
 
 
 @app.route("/api/report", methods=["POST"])
@@ -431,6 +465,14 @@ def generate_report():
 
 with app.app_context():
     db.create_all()
+    
+    # Initialize Threshold table with default values if empty
+    if not Threshold.query.first():
+        db.session.add(Threshold())
+        db.session.commit()
+        print("Default thresholds created.")
+
+    # Initialize admin user if none exists
     if not User.query.filter_by(role="admin").first():
         admin = User(username="admin", email="admin@local", role="admin")
         admin.set_password("admin123")  # CHANGE THIS AFTER FIRST LOGIN

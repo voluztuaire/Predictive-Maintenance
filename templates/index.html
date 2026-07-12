@@ -412,23 +412,47 @@
                 <div class="settings-grid">
                     <div class="card glass-card">
                         <div class="card-header"><h3>Alert Thresholds</h3></div>
+                        
                         <div class="setting-row">
-                            <label>Temperature Warning (C)</label>
-                            <input type="number" class="setting-input" value="75">
+                            <div class="slider-label-row">
+                                <label>Temperature Warning (C)</label>
+                                <span class="slider-value" id="val-temp-threshold">--</span>
+                            </div>
+                            <input type="range" class="range-slider" id="slider-temp" min="0" max="150" step="1" autocomplete="off"
+                                oninput="document.getElementById('val-temp-threshold').innerText = this.value">
                         </div>
+
                         <div class="setting-row">
-                            <label>Vibration Warning (mm/s)</label>
-                            <input type="number" class="setting-input" value="3.5" step="0.1">
+                            <div class="slider-label-row">
+                                <label>Vibration Warning (mm/s)</label>
+                                <span class="slider-value" id="val-vib-threshold">--</span>
+                            </div>
+                            <input type="range" class="range-slider" id="slider-vib" min="0" max="20" step="0.1" autocomplete="off"
+                                oninput="document.getElementById('val-vib-threshold').innerText = this.value">
                         </div>
+
                         <div class="setting-row">
-                            <label>Current Deviation Limit (%)</label>
-                            <input type="number" class="setting-input" value="15">
+                            <div class="slider-label-row">
+                                <label>Current Deviation Limit (%)</label>
+                                <span class="slider-value" id="val-current-threshold">--</span>
+                            </div>
+                            <input type="range" class="range-slider" id="slider-current" min="0" max="50" step="1" autocomplete="off"
+                                oninput="document.getElementById('val-current-threshold').innerText = this.value">
                         </div>
+
                         <div class="setting-row">
-                            <label>Pressure Warning (bar)</label>
-                            <input type="number" class="setting-input" value="5.5" step="0.1">
+                            <div class="slider-label-row">
+                                <label>Pressure Warning (bar)</label>
+                                <span class="slider-value" id="val-pressure-threshold">--</span>
+                            </div>
+                            <input type="range" class="range-slider" id="slider-pressure" min="0" max="15" step="0.1" autocomplete="off"
+                                oninput="document.getElementById('val-pressure-threshold').innerText = this.value">
                         </div>
-                        <button class="btn-action" style="margin-top: 8px;" onclick="alert('Settings saved (placeholder).')">Save Thresholds</button>
+
+                        <div style="display:flex; gap:10px; margin-top:8px;">
+                            <button class="btn-action" onclick="saveThresholds()">Save Thresholds</button>
+                            <button class="btn-outline" onclick="resetThresholds()">Reset to Default</button>
+                        </div>
                     </div>
 
                     <div class="card glass-card">
@@ -510,6 +534,23 @@
             <div class="report-modal-footer">
                 <button class="btn-outline" onclick="closeReportModal()">Cancel</button>
                 <button class="btn-action" onclick="submitReport()">Download PDF</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CUSTOM POPUP MODAL -->
+    <div id="custom-modal" class="custom-modal-overlay">
+        <div class="custom-modal glass-card">
+            <div class="custom-modal-header">
+                <i class="fa-solid fa-circle-check" id="modal-icon"></i>
+                <h3 id="modal-title">Success</h3>
+            </div>
+            <div class="custom-modal-body">
+                <p id="modal-message">Settings saved successfully.</p>
+            </div>
+            <div class="custom-modal-footer">
+                <button class="btn-action" id="modal-confirm-btn">OK</button>
+                <button class="btn-outline" id="modal-cancel-btn" style="display:none;">Cancel</button>
             </div>
         </div>
     </div>
