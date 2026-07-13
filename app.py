@@ -42,28 +42,101 @@ app.register_blueprint(auth_bp)
 MODEL_DIR = "models"
 
 # ============================================================
-# NADINE'S MODELS (Fault Type classifier + RUL regressor)
+# NA'S MODEL (Fault Type classifier)
+# ------------------------------------------------------------
+# NA's RUL regressor is no longer used for health_score/rul_hours.
+# Those two fields are now sourced from SN's condition-grounded
+# health_v2 / rul_v2 models (see below) since they are trained
+# against labels that actually reflect physical condition rather
+# than pure elapsed time. NA's fault classifier is still the only
+# source for fault_type / probable_cause / recommendation.
 # ============================================================
 fault_clf = joblib.load(os.path.join(MODEL_DIR, "fault_classifier_model.pkl"))
-rul_reg = joblib.load(os.path.join(MODEL_DIR, "rul_regressor_model.pkl"))
-nadine_scaler = joblib.load(os.path.join(MODEL_DIR, "feature_scaler.pkl"))
+na_scaler = joblib.load(os.path.join(MODEL_DIR, "feature_scaler.pkl"))
 
-NADINE_FEATURE_COLS = joblib.load(os.path.join(MODEL_DIR, "feature_columns.pkl"))
+NA_FEATURE_COLS = joblib.load(os.path.join(MODEL_DIR, "feature_columns.pkl"))
 FAULT_LABEL_MAP = joblib.load(os.path.join(MODEL_DIR, "fault_label_map.pkl"))
 
-RUL_REFERENCE_HOURS = 3000
-
 # ============================================================
-# SALSA'S MODEL (Severity condition: Normal/Warning/Critical/Failure)
+# SH'S MODEL (Severity condition: Normal/Warning/Critical/Failure)
 # ============================================================
 condition_clf = joblib.load(os.path.join(MODEL_DIR, "condition_classifier.joblib"))
-salsa_scaler = joblib.load(os.path.join(MODEL_DIR, "condition_scaler.joblib"))
+sh_scaler = joblib.load(os.path.join(MODEL_DIR, "condition_scaler.joblib"))
 
-SALSA_FEATURE_COLS = [
+SH_FEATURE_COLS = [
     "Voltage_L1", "Voltage_L2", "Voltage_L3", "Frequency", "Power_Factor",
     "Temperature", "Vibration_X", "Vibration_Y", "Vibration_Z", "Rotational_Speed",
     "Voltage_Imbalance", "Vibration_Total", "Voltage_Mean", "RPM_Deviation"
 ]
+
+# ============================================================
+# SN'S MODELS (condition-grounded Health Score v2 + RUL v2)
+# ------------------------------------------------------------
+# SN's feature spec reuses the exact same 14 base features and the
+# exact same shared scaler as SH's model (condition_scaler.joblib),
+# then adds rolling (1h) / trend (24h) features on top, computed
+# per-motor. These extra columns are computed once at startup below
+# and cached on `df`, so no per-request feature engineering is needed.
+# ============================================================
+sn_rul_model = joblib.load(os.path.join(MODEL_DIR, "rul_v2.joblib"))
+sn_health_model = joblib.load(os.path.join(MODEL_DIR, "health_v2.joblib"))
+
+SN_SENSOR_COLS = [
+    "Voltage_L1", "Voltage_L2", "Voltage_L3",
+    "Frequency", "Power_Factor", "Temperature",
+    "Vibration_X", "Vibration_Y", "Vibration_Z",
+    "Rotational_Speed",
+]
+SN_ENGINEERED_BASE = ["Voltage_Imbalance", "Vibration_Total", "Voltage_Mean", "RPM_Deviation"]
+SN_FEATURE_COLS = SN_SENSOR_COLS + SN_ENGINEERED_BASE
+
+SN_SHORT_WINDOW = 4
+SN_LONG_WINDOW = 96
+
+
+def sn_add_scaled_features(data: pd.DataFrame) -> pd.DataFrame:
+    data = data.copy()
+    scaled = sh_scaler.transform(data[SN_FEATURE_COLS])
+    for i, col in enumerate(SN_FEATURE_COLS):
+        data[f"{col}_scaled"] = scaled[:, i]
+    return data
+
+
+def sn_add_temporal_features(data: pd.DataFrame) -> pd.DataFrame:
+    data = data.sort_values(["motor_id", "timestamp"]).reset_index(drop=True)
+    cols_to_track = [f"{c}_scaled" for c in SN_FEATURE_COLS]
+    n = SN_LONG_WINDOW
+    out_frames = []
+
+    for motor_id, g in data.groupby("motor_id"):
+        g = g.copy()
+        t = np.arange(len(g))
+        for col in cols_to_track:
+            g[f"{col}_roll_mean_1h"] = g[col].rolling(SN_SHORT_WINDOW, min_periods=1).mean()
+            g[f"{col}_roll_std_1h"] = g[col].rolling(SN_SHORT_WINDOW, min_periods=1).std().fillna(0)
+
+            y = g[col].values
+            roll_sum_y = pd.Series(y).rolling(n, min_periods=4).sum().values
+            roll_sum_t = pd.Series(t).rolling(n, min_periods=4).sum().values
+            roll_sum_ty = pd.Series(t * y).rolling(n, min_periods=4).sum().values
+            roll_sum_tt = pd.Series(t * t).rolling(n, min_periods=4).sum().values
+            roll_count = pd.Series(y).rolling(n, min_periods=4).count().values
+
+            denom = roll_count * roll_sum_tt - roll_sum_t ** 2
+            slope = np.where(denom != 0, (roll_count * roll_sum_ty - roll_sum_t * roll_sum_y) / denom, 0.0)
+            g[f"{col}_trend_24h"] = np.nan_to_num(slope)
+        out_frames.append(g)
+
+    return pd.concat(out_frames, ignore_index=True)
+
+
+def sn_get_feature_columns():
+    cols = []
+    for c in SN_FEATURE_COLS:
+        sc = f"{c}_scaled"
+        cols += [sc, f"{sc}_roll_mean_1h", f"{sc}_roll_std_1h", f"{sc}_trend_24h"]
+    return cols
+
 
 # ============================================================
 # RECOMMENDATION TABLE
@@ -93,7 +166,7 @@ RECOMMENDATION_TABLE = {
 
 
 # ============================================================
-# FEATURE ENGINEERING
+# NA'S FEATURE ENGINEERING (used for fault type classification only)
 # ============================================================
 def engineer_features(data: pd.DataFrame, short_window=4, long_window=24) -> pd.DataFrame:
     data = data.copy()
@@ -133,9 +206,16 @@ df["Vibration_Total"] = np.sqrt(df["Vibration_X"]**2 + df["Vibration_Y"]**2 + df
 df["Voltage_Mean"] = df[["Voltage_L1", "Voltage_L2", "Voltage_L3"]].mean(axis=1)
 df["RPM_Deviation"] = abs(df["Rotational_Speed"] - 1500)
 
+df = sn_add_scaled_features(df)
+df = sn_add_temporal_features(df)
+
+SN_ALL_FEATURE_COLS = sn_get_feature_columns()
+_sn_X_all = df[SN_ALL_FEATURE_COLS].fillna(0).values
+df["sn_rul_hours"] = sn_rul_model.predict(_sn_X_all)
+df["sn_health_score"] = np.clip(sn_health_model.predict(_sn_X_all), 0, 100)
+
 ALL_MOTOR_IDS = sorted(df["motor_id"].unique().tolist())
 
-# Real-time simulation: current index per motor
 motor_row_index = {mid: 0 for mid in ALL_MOTOR_IDS}
 motor_row_counts = df.groupby("motor_id").size().to_dict()
 
@@ -177,28 +257,23 @@ def advance_all_motors():
 
 
 def predict_row(row):
-    """Combine Nadine's fault type + RUL prediction with Salsa's severity condition."""
+    na_features = row[NA_FEATURE_COLS].values.reshape(1, -1)
+    na_scaled = na_scaler.transform(na_features)
 
-    # ----- Nadine: fault type + RUL -----
-    nadine_features = row[NADINE_FEATURE_COLS].values.reshape(1, -1)
-    nadine_scaled = nadine_scaler.transform(nadine_features)
-
-    fault_pred_raw = fault_clf.predict(nadine_scaled)[0]
+    fault_pred_raw = fault_clf.predict(na_scaled)[0]
     if isinstance(fault_clf, XGBClassifier):
         fault_pred = FAULT_LABEL_MAP[int(fault_pred_raw)]
     else:
         fault_pred = str(fault_pred_raw)
-    rul_pred = float(rul_reg.predict(nadine_scaled)[0])
 
-    health_score = max(0.0, min(100.0, (rul_pred / RUL_REFERENCE_HOURS) * 100))
+    sh_features = row[SH_FEATURE_COLS].values.reshape(1, -1)
+    sh_scaled = sh_scaler.transform(sh_features)
+    condition_label = condition_clf.predict(sh_scaled)[0]
+
+    rul_pred = float(row["sn_rul_hours"])
+    health_score = float(np.clip(row["sn_health_score"], 0, 100))
     failure_probability = round(100 - health_score, 1)
 
-    # ----- Salsa: severity condition -----
-    salsa_features = row[SALSA_FEATURE_COLS].values.reshape(1, -1)
-    salsa_scaled = salsa_scaler.transform(salsa_features)
-    condition_label = condition_clf.predict(salsa_scaled)[0]
-
-    # ----- Recommendation lookup (based on fault type) -----
     fault_info = RECOMMENDATION_TABLE.get(fault_pred, RECOMMENDATION_TABLE["Normal"])
 
     rul_display = min(rul_pred, 5000)
@@ -285,7 +360,7 @@ def get_history():
 def get_alerts():
     device_id = request.args.get("device")
     alerts = []
-    
+
     if device_id:
         rows = [get_row_for_device(device_id)]
     else:
@@ -503,7 +578,7 @@ def generate_report():
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, topMargin=2*cm, bottomMargin=2*cm)
     styles = getSampleStyleSheet()
-    
+
     wrap_style = ParagraphStyle(
         "WrapStyle",
         parent=styles["Normal"],
@@ -512,7 +587,7 @@ def generate_report():
         alignment=TA_LEFT,
         wordWrap='CJK'
     )
-    
+
     title_style = ParagraphStyle("TitleStyle", parent=styles["Heading1"], textColor=colors.HexColor("#f97316"))
 
     elements = []
@@ -565,14 +640,14 @@ def generate_report():
         elements.append(t)
 
         motor_hist = df[df["motor_id"] == device_id].sort_values("timestamp").tail(30)
-        
+
         chart_configs = [
             ("temperature", "Temperature", motor_hist["Temperature"], "#f97316"),
             ("vibration", "Vibration RMS", [get_vibration_rms(r) for _, r in motor_hist.iterrows()], "#a855f7"),
             ("voltage", "Voltage Avg", [get_avg_voltage(r) for _, r in motor_hist.iterrows()], "#38bdf8"),
             ("rpm", "Rotational Speed", motor_hist["Rotational_Speed"], "#22c55e"),
         ]
-        
+
         for field_key, field_label, series, color in chart_configs:
             if not motor_hist.empty and field_key in selected_fields:
                 fig, ax = plt.subplots(figsize=(6, 2.2))

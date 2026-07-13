@@ -806,3 +806,4 @@ setInterval(() => {
         loadLogs();
     });
 }, 8000);
+
