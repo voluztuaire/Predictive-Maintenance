@@ -115,24 +115,3 @@ This application uses **three independently trained models**, each with its own 
 | **Condition Severity** | Assesses overall health | Health score & severity level |
 
 Each model is trained on different feature sets and uses its own dedicated scaler — they are never mixed during inference.
-
----
-
-### Adding or Replacing a Model
-
-To add a new model or replace an existing one:
-
-1. Save the new model file, its scaler, and its feature column list into `models/`.
-2. In `app.py`, load the three files near the top, following the existing pattern.
-3. Inside `predict_row()`, add a block that:
-   - Builds the model's feature row
-   - Scales it using its own scaler
-   - Generates the prediction
-4. Update the final returned dictionary to include outputs from the new model (e.g. `health_score`, `rul_hours`).
-5. If two models produce overlapping outputs, pick one as the source of truth or blend them — don't let unrelated models overwrite each other.
-
-> **Note:** It is normal for different models to disagree (e.g. one says "Normal" while another shows low health). Check `get_alerts()` in `app.py` to see how multiple signals are combined to determine alerts.
-
----
-
-Simple and clear, right? Just replace the old section with this one. 😊
