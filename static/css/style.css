@@ -115,7 +115,7 @@ body{background-color:#000;color:var(--text-main);height:100vh;overflow:hidden}
 /* Parameter row */
 .params-row-wrapper{display:flex;flex-direction:column;gap:var(--gap-lg)}
 .params-row{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--gap-lg)}
-.param-card{display:flex;align-items:center;gap:14px;padding:18px 20px;position:relative}
+.param-card{display:flex;align-items:center;gap:8px;padding:16px 16px;position:relative}
 .param-icon{width:42px;height:42px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
 .param-icon.temp{background:rgba(249,115,22,.12);color:var(--primary-orange)}
 .param-icon.vib{background:rgba(168,85,247,.12);color:#a855f7}
