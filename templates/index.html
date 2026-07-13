@@ -478,7 +478,7 @@
                                 <option>Weekly</option>
                             </select>
                         </div>
-                        <button class="btn-action" style="margin-top: 8px;" onclick="alert('Configuration saved (placeholder).')">Save Configuration</button>
+                        <button class="btn-action" style="margin-top: 8px;" onclick="saveConfiguration()">Save Configuration</button>
                     </div>
                 </div>
             </div>
@@ -504,6 +504,12 @@
                     </div>
                 </div>
                 <div id="motor-picker-list" class="motor-picker-list"></div>
+                
+                <!-- Motor count display -->
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; font-size:12px; color:var(--text-muted);">
+                    <span>Selected: <strong id="selected-count">0</strong> motors</span>
+                    <span id="total-count">Total: 0 motors</span>
+                </div>
 
                 <div class="report-section-label">Include Fields</div>
                 <div class="report-fields-grid">
@@ -533,7 +539,12 @@
 
             <div class="report-modal-footer">
                 <button class="btn-outline" onclick="closeReportModal()">Cancel</button>
-                <button class="btn-action" onclick="submitReport()">Download PDF</button>
+                <button class="btn-action" id="report-generate-btn" onclick="submitReport()">
+                    <span id="report-btn-text">Download PDF</span>
+                    <span id="report-btn-spinner" style="display:none;">
+                        <i class="fa-solid fa-spinner fa-spin"></i> Generating...
+                    </span>
+                </button>
             </div>
         </div>
     </div>

@@ -16,11 +16,6 @@ document.addEventListener("DOMContentLoaded", () => {
     loadThresholds();
 });
 
-const SENSOR_LABELS = ['T-30m', 'T-25m', 'T-20m', 'T-15m', 'T-10m', 'T-5m', 'Now'];
-const SENSOR_TEMP = [45, 46, 45, 50, 58, 65, 72];
-const SENSOR_VIB = [1.2, 1.2, 1.3, 1.5, 2.1, 2.8, 3.5];
-const SENSOR_CURR = [22, 23, 22, 24, 26, 28, 29];
-
 /* CUSTOM MODAL */
 function showModal(options) {
     const modal = document.getElementById('custom-modal');
@@ -30,7 +25,6 @@ function showModal(options) {
     const confirmBtn = document.getElementById('modal-confirm-btn');
     const cancelBtn = document.getElementById('modal-cancel-btn');
 
-    // Default values
     const type = options.type || 'info';
     const iconMap = {
         success: 'fa-circle-check',
@@ -51,14 +45,12 @@ function showModal(options) {
     title.textContent = options.title || titleMap[type] || 'Notification';
     message.textContent = options.message || 'Operation completed.';
 
-    // Configure buttons
     if (type === 'confirm' || options.confirm) {
         confirmBtn.style.display = 'flex';
         cancelBtn.style.display = 'flex';
         confirmBtn.textContent = options.confirmText || 'Confirm';
         cancelBtn.textContent = options.cancelText || 'Cancel';
         
-        // Remove old listeners
         const newConfirm = confirmBtn.cloneNode(true);
         const newCancel = cancelBtn.cloneNode(true);
         confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
@@ -77,7 +69,6 @@ function showModal(options) {
         cancelBtn.style.display = 'none';
         confirmBtn.textContent = options.buttonText || 'OK';
         
-        // Remove old listeners
         const newConfirm = confirmBtn.cloneNode(true);
         confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
         
@@ -94,7 +85,6 @@ function closeModal() {
     document.getElementById('custom-modal').classList.remove('open');
 }
 
-// Close modal on overlay click
 document.addEventListener('DOMContentLoaded', function() {
     const modal = document.getElementById('custom-modal');
     if (modal) {
@@ -106,20 +96,11 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-// Close modal on Escape key
 document.addEventListener('keydown', function(e) {
     if (e.key === 'Escape') {
         closeModal();
     }
 });
-
-function buildSensorDatasets() {
-    return [
-        { label: 'Temperature (C)', data: SENSOR_TEMP, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', borderWidth: 2, tension: 0.4, fill: true },
-        { label: 'Vibration (mm/s)', data: SENSOR_VIB, borderColor: '#a855f7', borderWidth: 2, tension: 0.4, fill: false },
-        { label: 'Current (A)', data: SENSOR_CURR, borderColor: '#38bdf8', borderWidth: 2, tension: 0.4, fill: false }
-    ];
-}
 
 function chartOptions() {
     return {
@@ -127,30 +108,67 @@ function chartOptions() {
         maintainAspectRatio: false,
         plugins: { legend: { labels: { color: '#9ca3af', boxWidth: 12, padding: 16 } } },
         scales: {
-            y: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' } },
+            y: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' }, beginAtZero: false },
             x: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' } }
         }
     };
 }
 
 function initChart() {
-    const ctx = document.getElementById('sensorChart').getContext('2d');
-    sensorChartInstance = new Chart(ctx, {
-        type: 'line',
-        data: { labels: SENSOR_LABELS, datasets: buildSensorDatasets() },
-        options: chartOptions()
-    });
+    const url = currentDevice ? `/api/history?device=${encodeURIComponent(currentDevice)}&points=20` : '/api/history?points=20';
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            const ctx = document.getElementById('sensorChart').getContext('2d');
+            if (sensorChartInstance) sensorChartInstance.destroy();
+            sensorChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        { label: 'Temperature (C)', data: data.temperature, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', borderWidth: 2, tension: 0.4, fill: true, yAxisID: 'y' },
+                        { label: 'Vibration (mm/s)', data: data.vibration, borderColor: '#a855f7', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'y' },
+                        { label: 'Voltage (V)', data: data.voltage, borderColor: '#38bdf8', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'y1' }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#9ca3af', boxWidth: 12, padding: 16 } } },
+                    scales: {
+                        y: { position: 'left', grid: { color: '#262626' }, ticks: { color: '#9ca3af' }, title: { display: true, text: 'Temp / Vibration', color: '#9ca3af' } },
+                        y1: { position: 'right', grid: { display: false }, ticks: { color: '#38bdf8' }, title: { display: true, text: 'Voltage (V)', color: '#38bdf8' } },
+                        x: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' } }
+                    }
+                }
+            });
+        })
+        .catch(error => console.error('Error loading main chart:', error));
 }
 
 function initFullChart() {
-    const canvas = document.getElementById('sensorChartFull');
-    if (!canvas || sensorChartFullInstance) return;
-    const ctx = canvas.getContext('2d');
-    sensorChartFullInstance = new Chart(ctx, {
-        type: 'line',
-        data: { labels: SENSOR_LABELS, datasets: buildSensorDatasets() },
-        options: chartOptions()
-    });
+    const url = currentDevice ? `/api/history?device=${encodeURIComponent(currentDevice)}&points=30` : '/api/history?points=30';
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            const canvas = document.getElementById('sensorChartFull');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (sensorChartFullInstance) sensorChartFullInstance.destroy();
+            sensorChartFullInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        { label: 'Temperature (C)', data: data.temperature, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', borderWidth: 2, tension: 0.4, fill: true },
+                        { label: 'Vibration (mm/s)', data: data.vibration, borderColor: '#a855f7', borderWidth: 2, tension: 0.4, fill: false },
+                        { label: 'Voltage (V)', data: data.voltage, borderColor: '#38bdf8', borderWidth: 2, tension: 0.4, fill: false }
+                    ]
+                },
+                options: chartOptions()
+            });
+        })
+        .catch(error => console.error('Error loading full chart:', error));
 }
 
 /* COLLAPSIBLE CHART SECTIONS */
@@ -217,7 +235,7 @@ function renderFullSpark(paramKey) {
                     plugins: { legend: { display: false } },
                     scales: {
                         x: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' } },
-                        y: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' } }
+                        y: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' }, beginAtZero: false }
                     }
                 }
             });
@@ -279,8 +297,8 @@ function fetchAndUpdateMetrics() {
 
             currentDevice = data.device;
             loadSparklines();
+            initChart();
             
-            // Re-render full spark if expanded
             if (expandedParam) renderFullSpark(expandedParam);
         })
         .catch(error => console.error('Error updating status:', error));
@@ -534,7 +552,6 @@ function resetThresholds() {
                 });
         },
         onCancel: function() {
-            // User cancelled, do nothing
         }
     });
 }
@@ -630,7 +647,7 @@ function renderSparkline(canvasId, labels, data, color) {
             plugins: { legend: { display: false } },
             scales: {
                 x: { display: false },
-                y: { display: false }
+                y: { display: false, beginAtZero: false }
             }
         }
     });
@@ -665,6 +682,7 @@ function openReportModal() {
                 `;
                 list.appendChild(item);
             });
+            updateMotorCount();
         });
     document.getElementById('report-modal').classList.add('open');
 }
@@ -674,10 +692,43 @@ function closeReportModal() {
 }
 
 function toggleAllMotors(checked) {
-    document.querySelectorAll('.report-motor-check').forEach(cb => cb.checked = checked);
+    document.querySelectorAll('.report-motor-check').forEach(cb => {
+        cb.checked = checked;
+        updateMotorItemStyle(cb);
+    });
+    updateMotorCount();
 }
 
+function updateMotorItemStyle(checkbox) {
+    const item = checkbox.closest('.motor-picker-item');
+    if (checkbox.checked) {
+        item.classList.add('selected');
+    } else {
+        item.classList.remove('selected');
+    }
+}
+
+function updateMotorCount() {
+    const checked = document.querySelectorAll('.report-motor-check:checked').length;
+    const total = document.querySelectorAll('.report-motor-check').length;
+    const countEl = document.getElementById('selected-count');
+    const totalEl = document.getElementById('total-count');
+    if (countEl) countEl.textContent = checked;
+    if (totalEl) totalEl.textContent = `Total: ${total} motors`;
+}
+
+document.addEventListener('change', function(e) {
+    if (e.target.classList.contains('round-check') && e.target.closest('.motor-picker-item')) {
+        updateMotorItemStyle(e.target);
+        updateMotorCount();
+    }
+});
+
 function submitReport() {
+    const btn = document.getElementById('report-generate-btn');
+    const btnText = document.getElementById('report-btn-text');
+    const spinner = document.getElementById('report-btn-spinner');
+    
     const motors = Array.from(document.querySelectorAll('.report-motor-check:checked')).map(cb => cb.value);
     const fields = Array.from(document.querySelectorAll('.report-field:checked')).map(cb => cb.value);
     const includePredictions = document.getElementById('report-predictions').checked;
@@ -701,12 +752,21 @@ function submitReport() {
         return;
     }
 
+    btn.disabled = true;
+    btnText.style.display = 'none';
+    spinner.style.display = 'inline';
+
     fetch('/api/report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ motors, fields, include_predictions: includePredictions })
     })
-    .then(r => r.blob())
+    .then(r => {
+        if (!r.ok) {
+            throw new Error('Failed to generate report');
+        }
+        return r.blob();
+    })
     .then(blob => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -714,6 +774,12 @@ function submitReport() {
         a.download = 'winteq_maintenance_report.pdf';
         a.click();
         closeReportModal();
+        showModal({
+            type: 'success',
+            title: 'Report Generated',
+            message: 'PDF report has been downloaded successfully.',
+            buttonText: 'OK'
+        });
     })
     .catch(error => {
         showModal({
@@ -723,5 +789,20 @@ function submitReport() {
             buttonText: 'OK'
         });
         console.error('Error generating report:', error);
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btnText.style.display = 'inline';
+        spinner.style.display = 'none';
     });
 }
+
+setInterval(() => {
+    fetch('/api/tick', { method: 'POST' }).then(() => {
+        fetchAndUpdateMetrics();
+        fetchAndRenderAlerts();
+        loadMotors();
+        loadSensors();
+        loadLogs();
+    });
+}, 8000);
