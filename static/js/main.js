@@ -160,15 +160,23 @@ function initFullChart() {
                 data: {
                     labels: data.labels,
                     datasets: [
-                        { label: 'Temperature (C)', data: data.temperature, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', borderWidth: 2, tension: 0.4, fill: true },
-                        { label: 'Vibration (mm/s)', data: data.vibration, borderColor: '#a855f7', borderWidth: 2, tension: 0.4, fill: false },
-                        { label: 'Voltage (V)', data: data.voltage, borderColor: '#38bdf8', borderWidth: 2, tension: 0.4, fill: false }
+                        { label: 'Temperature (C)', data: data.temperature, borderColor: '#f97316', yAxisID: 'y', borderWidth: 2, tension: 0.4, fill: true },
+                        { label: 'Vibration (mm/s)', data: data.vibration, borderColor: '#a855f7', yAxisID: 'y', borderWidth: 2, tension: 0.4, fill: false },
+                        { label: 'Voltage (V)', data: data.voltage, borderColor: '#38bdf8', yAxisID: 'y1', borderWidth: 2, tension: 0.4, fill: false }
                     ]
                 },
-                options: chartOptions()
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#9ca3af' } } },
+                    scales: {
+                        y: { position: 'left', ticks: { color: '#9ca3af' }, grid: { color: '#262626' } },
+                        y1: { position: 'right', ticks: { color: '#38bdf8' }, grid: { display: false } },
+                        x: { ticks: { color: '#9ca3af' }, grid: { color: '#262626' } }
+                    }
+                }
             });
-        })
-        .catch(error => console.error('Error loading full chart:', error));
+        });
 }
 
 /* COLLAPSIBLE CHART SECTIONS */
@@ -423,6 +431,7 @@ function loadSensors() {
                 body.appendChild(tr);
             });
             initFullChart();
+            initForecastChart();   
         })
         .catch(error => console.error('Error loading sensors:', error));
 }
@@ -582,7 +591,7 @@ function switchTab(tabName, navEl) {
         if (el) el.style.display = (page === tabName) ? 'flex' : 'none';
     });
 
-    if (tabName === 'sensors') initFullChart();
+    if (tabName === 'sensors') { initFullChart(); initForecastChart(); }
 }
 
 function selectDevice(deviceId) {
@@ -807,3 +816,112 @@ setInterval(() => {
     });
 }, 8000);
 
+let forecastChartInstance = null;
+
+function initForecastChart() {
+    const url = currentDevice ? `/api/forecast?device=${encodeURIComponent(currentDevice)}&horizon=48` : '/api/forecast?horizon=48';
+    fetch(url)
+        .then(r => r.json())
+        .then(data => {
+            const canvas = document.getElementById('forecastChart');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            if (forecastChartInstance) forecastChartInstance.destroy();
+            forecastChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: data.labels,
+                    datasets: [
+                        { label: 'Predicted Health Score', data: data.predicted_health, borderColor: '#22c55e', yAxisID: 'y', borderWidth: 2, tension: 0.4, fill: false },
+                        { label: 'Predicted RUL (Hrs)', data: data.predicted_rul, borderColor: '#f97316', yAxisID: 'y1', borderWidth: 2, tension: 0.4, fill: false }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#9ca3af' } } },
+                    scales: {
+                        y: { position: 'left', min:0, max:100, ticks: { color: '#22c55e' }, grid: { color: '#262626' } },
+                        y1: { position: 'right', ticks: { color: '#f97316' }, grid: { display: false } },
+                        x: { ticks: { color: '#9ca3af' }, grid: { color: '#262626' } }
+                    }
+                }
+            });
+            renderSensorForecastGrid(data.sensors);
+        })
+        .catch(err => console.error('Error loading forecast chart:', err));
+}
+
+let sensorDetailVisible = true;
+
+function toggleSensorDetail() {
+    sensorDetailVisible = !sensorDetailVisible;
+    document.getElementById('sensor-forecast-grid').style.display = sensorDetailVisible ? 'grid' : 'none';
+    document.getElementById('sensor-detail-toggle').innerText = sensorDetailVisible ? 'Hide detail' : 'Show detail';
+}
+
+const SENSOR_LABELS = {
+    Temperature: { name: 'Temperature', unit: '°C' },
+    Vibration_X: { name: 'Vibration X', unit: 'mm/s' },
+    Vibration_Y: { name: 'Vibration Y', unit: 'mm/s' },
+    Vibration_Z: { name: 'Vibration Z', unit: 'mm/s' },
+    Voltage_L1: { name: 'Voltage L1', unit: 'V' },
+    Voltage_L2: { name: 'Voltage L2', unit: 'V' },
+    Voltage_L3: { name: 'Voltage L3', unit: 'V' },
+    Frequency: { name: 'Frequency', unit: 'Hz' },
+    Power_Factor: { name: 'Power Factor', unit: '' },
+    Rotational_Speed: { name: 'Rotational Speed', unit: 'rpm' }
+};
+
+function renderSensorForecastGrid(sensors) {
+    const grid = document.getElementById('sensor-forecast-grid');
+    grid.innerHTML = '';
+
+    Object.keys(sensors).forEach(key => {
+        const series = sensors[key];
+        const meta = SENSOR_LABELS[key] || { name: key, unit: '' };
+        const last = series[series.length - 1];
+        const first = series[0];
+        const trendUp = last > first;
+        const arrow = trendUp ? '↗' : (last < first ? '↘' : '');
+        const arrowColor = trendUp ? 'var(--danger)' : 'var(--text-muted)';
+
+        const canvasId = 'forecast-spark-' + key;
+        const card = document.createElement('div');
+        card.className = 'card glass-card param-card';
+        card.style.flexDirection = 'column';
+        card.style.alignItems = 'stretch';
+        card.innerHTML = `
+            <div class="param-label">${meta.name}</div>
+            <div class="param-value">${last}${meta.unit ? ' <span class="unit">' + meta.unit + '</span>' : ''}</div>
+            <div class="spark-wrap" style="width:100%;height:50px;margin-top:8px;">
+                <canvas id="${canvasId}"></canvas>
+            </div>
+        `;
+        grid.appendChild(card);
+
+        setTimeout(() => {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: series.map((_, i) => i),
+                    datasets: [{
+                        data: series,
+                        borderColor: trendUp ? '#ef4444' : '#9ca3af',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.3,
+                        fill: false
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: { legend: { display: false } },
+                    scales: { x: { display: false }, y: { display: false } }
+                }
+            });
+        }, 0);
+    });
+}

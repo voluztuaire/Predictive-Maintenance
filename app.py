@@ -21,6 +21,7 @@ from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
 from models import db, User, Threshold, DEFAULT_THRESHOLDS
 from auth import auth_bp
+from forecast_engine import forecast_health_and_rul
 
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "change-this-to-a-random-secret-string"
@@ -212,12 +213,13 @@ df = sn_add_temporal_features(df)
 SN_ALL_FEATURE_COLS = sn_get_feature_columns()
 _sn_X_all = df[SN_ALL_FEATURE_COLS].fillna(0).values
 df["sn_rul_hours"] = sn_rul_model.predict(_sn_X_all)
+df["Temperature_smooth"] = df.groupby("motor_id")["Temperature"].transform(lambda s: s.rolling(20, min_periods=1).mean())
 df["sn_health_score"] = np.clip(sn_health_model.predict(_sn_X_all), 0, 100)
 
 ALL_MOTOR_IDS = sorted(df["motor_id"].unique().tolist())
 
-motor_row_index = {mid: 0 for mid in ALL_MOTOR_IDS}
 motor_row_counts = df.groupby("motor_id").size().to_dict()
+motor_row_index = {mid: int(motor_row_counts[mid] * 0.7) for mid in ALL_MOTOR_IDS}
 
 STATUS_MAP = {
     "Normal": "Active",
@@ -271,7 +273,25 @@ def predict_row(row):
     condition_label = condition_clf.predict(sh_scaled)[0]
 
     rul_pred = float(row["sn_rul_hours"])
-    health_score = float(np.clip(row["sn_health_score"], 0, 100))
+    ml_health = float(np.clip(row["sn_health_score"], 0, 100))
+
+    temp = float(row["Temperature"])
+    vib = math.sqrt(row["Vibration_X"]**2 + row["Vibration_Y"]**2 + row["Vibration_Z"]**2)
+    rpm_dev = abs(float(row["Rotational_Speed"]) - 1475)
+
+    def score_from(value, healthy_max, fail_at):
+        if value <= healthy_max:
+            return 100.0
+        if value >= fail_at:
+            return 0.0
+        return 100.0 * (fail_at - value) / (fail_at - healthy_max)
+
+    temp_score = score_from(temp, 50, 85)
+    vib_score = score_from(vib, 2.5, 9.0)
+    rpm_score = score_from(rpm_dev, 30, 90)
+    rule_health = min(temp_score, vib_score, rpm_score)
+
+    health_score = min(ml_health, rule_health)
     failure_probability = round(100 - health_score, 1)
 
     fault_info = RECOMMENDATION_TABLE.get(fault_pred, RECOMMENDATION_TABLE["Normal"])
@@ -517,6 +537,41 @@ def get_logs():
 
     return jsonify(logs)
 
+@app.route("/api/forecast")
+@login_required
+def get_forecast():
+    device_id = request.args.get("device", ALL_MOTOR_IDS[0])
+    horizon = float(request.args.get("horizon", 48))
+
+    motor_df = df[df["motor_id"] == device_id].sort_values("timestamp")
+    history_df = motor_df.rename(columns={"timestamp": "Timestamp"}).tail(200)
+
+    result = forecast_health_and_rul(
+        history_df, horizon,
+        scaler=sh_scaler, rul_model=sn_rul_model, health_model=sn_health_model
+    )
+
+    smooth_window = 8
+    result["predicted_RUL_hours_smoothed"] = result["predicted_RUL_hours"].rolling(smooth_window, min_periods=1, center=True).mean()
+    result["predicted_Health_Score_smoothed"] = result["predicted_Health_Score"].rolling(smooth_window, min_periods=1, center=True).mean()
+
+    return jsonify({
+        "labels": result["Timestamp"].dt.strftime("%H:%M").tolist(),
+        "predicted_health": result["predicted_Health_Score_smoothed"].round(1).tolist(),
+        "predicted_rul": result["predicted_RUL_hours_smoothed"].round(1).tolist(),
+        "sensors": {
+            "Temperature": result["Temperature"].round(1).tolist(),
+            "Vibration_X": result["Vibration_X"].round(2).tolist(),
+            "Vibration_Y": result["Vibration_Y"].round(2).tolist(),
+            "Vibration_Z": result["Vibration_Z"].round(2).tolist(),
+            "Voltage_L1": result["Voltage_L1"].round(1).tolist(),
+            "Voltage_L2": result["Voltage_L2"].round(1).tolist(),
+            "Voltage_L3": result["Voltage_L3"].round(1).tolist(),
+            "Frequency": result["Frequency"].round(2).tolist(),
+            "Power_Factor": result["Power_Factor"].round(2).tolist(),
+            "Rotational_Speed": result["Rotational_Speed"].round(1).tolist(),
+        }
+    })
 
 @app.route("/api/tick", methods=["POST"])
 @login_required

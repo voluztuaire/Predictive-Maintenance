@@ -382,6 +382,29 @@
                         <canvas id="sensorChartFull"></canvas>
                     </div>
                 </div>
+
+                <div class="card glass-card chart-container" id="forecast-chart-container" style="height: 300px; margin-top: 24px;">
+                    <div class="card-header">
+                        <h3>Forecasted Health & RUL Trend</h3>
+                        <div class="card-header-actions">
+                            <button class="icon-toggle-btn" onclick="toggleChart('forecast-chart-container', this)">
+                                <i class="fa-solid fa-chevron-up"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="chart-body">
+                        <canvas id="forecastChart"></canvas>
+                    </div>
+                </div>
+
+                <div class="card glass-card" style="margin-top: 24px;">
+                    <div class="card-header">
+                        <h3>Sensor-level Forecast Detail</h3>
+                        <button class="btn-outline" onclick="toggleSensorDetail()" id="sensor-detail-toggle">Hide detail</button>
+                    </div>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Underlying sensor trends the health forecast above is derived from.</p>
+                    <div class="params-row" id="sensor-forecast-grid" style="grid-template-columns:repeat(3,1fr);"></div>
+                </div>
             </div>
 
             <!-- AI ALERTS -->
