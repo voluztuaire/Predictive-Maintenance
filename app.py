@@ -303,9 +303,12 @@ def get_alerts():
         prediction = predict_row(row)
         label = prediction["condition_label"]
         fault = prediction["fault_type"]
+        health = prediction["health_score"]
         device_id_str = str(row["motor_id"])
 
-        if label == "Critical":
+        # Trigger alert if EITHER model flags a problem, not just Salsa's condition_label.
+        # The two models can disagree since they use different features/scaling.
+        if label == "Critical" or health < 30:
             alerts.append({
                 "type": "warning",
                 "icon": "fa-temperature-high",
@@ -315,7 +318,7 @@ def get_alerts():
                 "action": "Investigate",
                 "device_id": device_id_str
             })
-        elif label == "Failure":
+        elif label == "Failure" or health < 15:
             alerts.append({
                 "type": "warning",
                 "icon": "fa-circle-exclamation",
@@ -325,7 +328,7 @@ def get_alerts():
                 "action": "Investigate",
                 "device_id": device_id_str
             })
-        elif label == "Warning":
+        elif label == "Warning" or health < 60:
             alerts.append({
                 "type": "info",
                 "icon": "fa-chart-line",
