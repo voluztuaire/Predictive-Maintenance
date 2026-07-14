@@ -275,9 +275,12 @@ def predict_row(row):
     rul_pred = float(row["sn_rul_hours"])
     ml_health = float(np.clip(row["sn_health_score"], 0, 100))
 
+    threshold = Threshold.query.first()
+
     temp = float(row["Temperature"])
     vib = math.sqrt(row["Vibration_X"]**2 + row["Vibration_Y"]**2 + row["Vibration_Z"]**2)
     rpm_dev = abs(float(row["Rotational_Speed"]) - 1475)
+    voltage_imbalance_pct = float(row["Voltage_Imbalance"]) / float(row["Voltage_Mean"]) * 100
 
     def score_from(value, healthy_max, fail_at):
         if value <= healthy_max:
@@ -286,11 +289,12 @@ def predict_row(row):
             return 0.0
         return 100.0 * (fail_at - value) / (fail_at - healthy_max)
 
-    temp_score = score_from(temp, 50, 85)
-    vib_score = score_from(vib, 2.5, 9.0)
-    rpm_score = score_from(rpm_dev, 30, 90)
-    rule_health = min(temp_score, vib_score, rpm_score)
+    temp_score = score_from(temp, threshold.temperature, threshold.temperature * 1.13)
+    vib_score = score_from(vib, threshold.vibration, threshold.vibration * 2.6)
+    rpm_score = score_from(rpm_dev, threshold.pressure * 5.5, threshold.pressure * 16.4)
+    volt_score = score_from(voltage_imbalance_pct, threshold.current_deviation, threshold.current_deviation * 2)
 
+    rule_health = min(temp_score, vib_score, rpm_score, volt_score)
     health_score = min(ml_health, rule_health)
     failure_probability = round(100 - health_score, 1)
 
