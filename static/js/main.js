@@ -286,8 +286,8 @@ function fetchAndUpdateMetrics() {
             document.getElementById('val-risklevel').innerText = data.failure_probability + "%";
             document.getElementById('val-temperature').innerHTML = data.temperature + ' <span class="unit">C</span>';
             document.getElementById('val-vibration').innerHTML = data.vibration + ' <span class="unit">mm/s</span>';
-            document.getElementById('val-current').innerHTML = data.current + ' <span class="unit">A</span>';
-            document.getElementById('val-pressure').innerHTML = data.pressure + ' <span class="unit">bar</span>';
+            document.getElementById('val-voltage').innerHTML = data.voltage + ' <span class="unit">V</span>';
+            document.getElementById('val-pressure').innerHTML = data.pressure + ' <span class="unit">RPM</span>';
             document.getElementById('val-recommendation').innerText = data.recommendation || 'System operating within normal parameters.';
 
             const healthNote = document.getElementById('val-health-note');
@@ -424,7 +424,7 @@ function loadSensors() {
                     </td>
                     <td>${s.temperature}</td>
                     <td>${s.vibration}</td>
-                    <td>${s.current}</td>
+                    <td>${s.voltage}</td>
                     <td>${s.pressure}</td>
                     <td><span class="status-pill ${s.status}"><span class="dot"></span>${s.status}</span></td>
                 `;
@@ -585,13 +585,13 @@ function switchTab(tabName, navEl) {
         if (target) target.classList.add('active');
     }
 
-    const pages = ['dashboard', 'assets', 'sensors', 'alerts', 'settings'];
+    const pages = ['dashboard', 'forecast', 'assets', 'sensors', 'alerts', 'training', 'settings'];
     pages.forEach(page => {
         const el = document.getElementById('page-' + page);
         if (el) el.style.display = (page === tabName) ? 'flex' : 'none';
     });
 
-    if (tabName === 'sensors') { initFullChart(); initForecastChart(); }
+    if (tabName === 'forecast') { loadForecastComparePage(); }
 }
 
 function selectDevice(deviceId) {
@@ -606,12 +606,74 @@ function refreshData() {
 }
 
 function triggerBell() {
-    showModal({
-        type: 'info',
-        title: 'Notifications',
-        message: 'You have no new notifications at this time.',
-        buttonText: 'Got it'
-    });
+    fetch('/api/notifications')
+        .then(r => r.json())
+        .then(data => {
+            if (data.notifications.length === 0) {
+                showModal({
+                    type: 'info',
+                    title: 'Notifications',
+                    message: 'You have no new notifications at this time.',
+                    buttonText: 'Got it'
+                });
+            } else {
+                showNotificationModal(data.notifications.slice(0, 10));
+            }
+            fetch('/api/notifications/read', { method: 'POST' });
+        })
+        .catch(err => {
+            showModal({
+                type: 'error',
+                title: 'Notifications',
+                message: 'Could not load notifications.',
+                buttonText: 'OK'
+            });
+            console.error('Error loading notifications:', err);
+        });
+}
+
+function severityIconBox(severity) {
+    const map = {
+        Warning: { icon: 'fa-triangle-exclamation', cls: 'warning' },
+        Critical: { icon: 'fa-circle-exclamation', cls: 'warning' },
+        Failure: { icon: 'fa-circle-exclamation', cls: 'critical' }
+    };
+    return map[severity] || { icon: 'fa-circle-info', cls: 'info' };
+}
+
+function showNotificationModal(notifications) {
+    const modal = document.getElementById('custom-modal');
+    const icon = document.getElementById('modal-icon');
+    const title = document.getElementById('modal-title');
+    const message = document.getElementById('modal-message');
+    const confirmBtn = document.getElementById('modal-confirm-btn');
+    const cancelBtn = document.getElementById('modal-cancel-btn');
+
+    icon.className = 'fa-solid fa-triangle-exclamation warning';
+    title.textContent = 'Notifications';
+    cancelBtn.style.display = 'none';
+    confirmBtn.style.display = 'flex';
+    confirmBtn.textContent = 'Close';
+
+    const newConfirm = confirmBtn.cloneNode(true);
+    confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
+    newConfirm.addEventListener('click', closeModal);
+
+    message.innerHTML = notifications.map(n => {
+        const meta = severityIconBox(n.severity);
+        return `
+            <div class="notif-item">
+                <div class="icon-box ${meta.cls}"><i class="fa-solid ${meta.icon}"></i></div>
+                <div class="notif-body">
+                    <div class="notif-title">${n.title}</div>
+                    <div class="notif-desc">${n.description}</div>
+                    <div class="notif-time">${n.time}</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    modal.classList.add('open');
 }
 
 function investigateAlert(deviceId) {
@@ -813,8 +875,31 @@ setInterval(() => {
         loadMotors();
         loadSensors();
         loadLogs();
+        updateNotifBadge();
     });
 }, 8000);
+
+function updateNotifBadge() {
+    fetch('/api/notifications')
+        .then(r => r.json())
+        .then(data => {
+            const bell = document.querySelector('.btn-icon[onclick="triggerBell()"]');
+            if (!bell) return;
+
+            let badge = bell.querySelector('.notif-badge');
+            if (data.unread_count > 0) {
+                if (!badge) {
+                    badge = document.createElement('span');
+                    badge.className = 'notif-badge';
+                    bell.appendChild(badge);
+                }
+                badge.textContent = data.unread_count > 9 ? '9+' : data.unread_count;
+            } else if (badge) {
+                badge.remove();
+            }
+        })
+        .catch(err => console.error('Error checking notif badge:', err));
+}
 
 let forecastChartInstance = null;
 
@@ -923,5 +1008,187 @@ function renderSensorForecastGrid(sensors) {
                 }
             });
         }, 0);
+    });
+}
+
+// ============================================================
+// CHATBOT WIDGET
+// ============================================================
+(function () {
+    const toggleBtn = document.getElementById("chatbot-toggle-btn");
+    const closeBtn = document.getElementById("chatbot-close-btn");
+    const widget = document.getElementById("chatbot-widget");
+    const messagesEl = document.getElementById("chatbot-messages");
+    const inputEl = document.getElementById("chatbot-input");
+    const sendBtn = document.getElementById("chatbot-send-btn");
+
+    function openChat() {
+        widget.classList.add("open");
+        toggleBtn.classList.add("hidden");
+        if (messagesEl.children.length === 0) {
+            addBubble("bot", "Hi, I'm your maintenance assistant. Ask me about any motor's status, or which motors need attention today.");
+        }
+        inputEl.focus();
+    }
+
+    function closeChat() {
+        widget.classList.remove("open");
+        toggleBtn.classList.remove("hidden");
+    }
+
+    function addBubble(role, text) {
+        const div = document.createElement("div");
+        div.className = "chat-bubble " + role;
+        div.textContent = text;
+        messagesEl.appendChild(div);
+        messagesEl.scrollTop = messagesEl.scrollHeight;
+        return div;
+    }
+
+    async function sendMessage() {
+        const text = inputEl.value.trim();
+        if (!text) return;
+
+        addBubble("user", text);
+        inputEl.value = "";
+        sendBtn.disabled = true;
+
+        const typingBubble = addBubble("bot typing", "Thinking...");
+
+        try {
+            const res = await fetch("/api/chat/llm", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ message: text })
+            });
+            const data = await res.json();
+            typingBubble.remove();
+            addBubble("bot", data.response || "No response received.");
+        } catch (err) {
+            typingBubble.remove();
+            addBubble("bot", "Error: could not reach the assistant. Make sure Ollama is running.");
+        } finally {
+            sendBtn.disabled = false;
+        }
+    }
+
+    toggleBtn.addEventListener("click", openChat);
+    closeBtn.addEventListener("click", closeChat);
+    sendBtn.addEventListener("click", sendMessage);
+    inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") sendMessage();
+    });
+})();
+
+let forecastCompareCharts = {};
+
+function combineVibrationRMS(sensors) {
+    return sensors.Vibration_X.map((vx, i) => {
+        const vy = sensors.Vibration_Y[i];
+        const vz = sensors.Vibration_Z[i];
+        return Math.sqrt(vx*vx + vy*vy + vz*vz);
+    });
+}
+
+function combineVoltageAvg(sensors) {
+    return sensors.Voltage_L1.map((v1, i) => {
+        const v2 = sensors.Voltage_L2[i];
+        const v3 = sensors.Voltage_L3[i];
+        return (v1 + v2 + v3) / 3;
+    });
+}
+
+function loadForecastComparePage() {
+    const historyUrl = currentDevice ? `/api/history?device=${encodeURIComponent(currentDevice)}&points=30` : '/api/history?points=30';
+    const forecastUrl = currentDevice ? `/api/forecast?device=${encodeURIComponent(currentDevice)}&horizon=48` : '/api/forecast?horizon=48';
+
+    Promise.all([fetch(historyUrl).then(r => r.json()), fetch(forecastUrl).then(r => r.json())])
+        .then(([hist, fcst]) => {
+            const grid = document.getElementById('forecast-compare-grid');
+            grid.innerHTML = '';
+
+            const fcstVibration = combineVibrationRMS(fcst.sensors);
+            const fcstVoltage = combineVoltageAvg(fcst.sensors);
+
+            const params = [
+                { key: 'temperature', label: 'Temperature (°C)', color: '#f97316', histData: hist.temperature, fcstData: fcst.sensors.Temperature },
+                { key: 'vibration', label: 'Vibration (mm/s)', color: '#a855f7', histData: hist.vibration, fcstData: fcstVibration },
+                { key: 'voltage', label: 'Voltage (V)', color: '#38bdf8', histData: hist.voltage, fcstData: fcstVoltage },
+                { key: 'rpm', label: 'Rotational Speed (RPM)', color: '#22c55e', histData: hist.rpm, fcstData: fcst.sensors.Rotational_Speed },
+            ];
+
+            params.forEach(p => {
+                const block = document.createElement('div');
+                block.className = 'forecast-param-block';
+                block.innerHTML = `
+                    <h4>${p.label}</h4>
+                    <div class="forecast-param-chart"><canvas id="fcst-combo-${p.key}"></canvas></div>
+                `;
+                grid.appendChild(block);
+
+                setTimeout(() => renderComboChart(`fcst-combo-${p.key}`, hist.labels, p.histData, fcst.labels, p.fcstData, p.color), 0);
+            });
+        })
+        .catch(err => console.error('Error loading forecast compare page:', err));
+}
+
+function renderComboChart(canvasId, histLabels, histData, fcstLabels, fcstData, color) {
+    const canvas = document.getElementById(canvasId);
+    if (!canvas) return;
+    if (forecastCompareCharts[canvasId]) forecastCompareCharts[canvasId].destroy();
+
+    // Gabung label jadi 1 sumbu X kontinu
+    const labels = [...histLabels, ...fcstLabels];
+
+    // Dataset historical: isi nilai asli di bagian awal, null di bagian forecast
+    const historicalSeries = [...histData, ...new Array(fcstData.length).fill(null)];
+
+    // Dataset forecast: null di seluruh historical KECUALI titik terakhir historical
+    // (diisi ulang nilai terakhir historical) supaya garis forecast nyambung visual dari situ
+    const forecastSeries = [
+        ...new Array(histData.length - 1).fill(null),
+        histData[histData.length - 1],
+        ...fcstData
+    ];
+
+    const ctx = canvas.getContext('2d');
+    forecastCompareCharts[canvasId] = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Historical',
+                    data: historicalSeries,
+                    borderColor: color,
+                    borderWidth: 2,
+                    tension: 0.35,
+                    pointRadius: 0,
+                    fill: false
+                },
+                {
+                    label: 'Forecast',
+                    data: forecastSeries,
+                    borderColor: color,
+                    borderDash: [6, 4],
+                    borderWidth: 2,
+                    tension: 0.35,
+                    pointRadius: 0,
+                    fill: false
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { mode: 'index', intersect: false }
+            },
+            scales: {
+                x: { grid: { color: '#262626' }, ticks: { color: '#9ca3af', maxTicksLimit: 8 } },
+                y: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' } }
+            }
+        }
     });
 }

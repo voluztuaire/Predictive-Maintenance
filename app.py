@@ -23,6 +23,13 @@ from models import db, User, Threshold, DEFAULT_THRESHOLDS
 from auth import auth_bp
 from forecast_engine import forecast_health_and_rul
 
+from chatbot_llm import (
+    chatbot_response_llm,
+    LLMConversationContext,
+    build_system_prompt,
+    save_history,
+)
+
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "change-this-to-a-random-secret-string"
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///users.db"
@@ -215,6 +222,7 @@ _sn_X_all = df[SN_ALL_FEATURE_COLS].fillna(0).values
 df["sn_rul_hours"] = sn_rul_model.predict(_sn_X_all)
 df["Temperature_smooth"] = df.groupby("motor_id")["Temperature"].transform(lambda s: s.rolling(20, min_periods=1).mean())
 df["sn_health_score"] = np.clip(sn_health_model.predict(_sn_X_all), 0, 100)
+df["sn_health_score_smooth"] = df.groupby("motor_id")["sn_health_score"].transform(lambda s: s.rolling(5, min_periods=1, center=True).mean())
 
 ALL_MOTOR_IDS = sorted(df["motor_id"].unique().tolist())
 
@@ -235,6 +243,61 @@ SENSOR_STATUS_MAP = {
     "Failure": "Critical"
 }
 
+# ============================================================
+# NOTIFICATION STATE (sustained-state + cooldown to avoid spam)
+# ============================================================
+from collections import deque
+
+SEVERITY_RANK = {"Normal": 0, "Warning": 1, "Critical": 2, "Failure": 3}
+SUSTAIN_THRESHOLD = 3          # must hold this severity for 3 consecutive ticks
+COOLDOWN_SECONDS = 120         # don't repeat same-level notif within 2 min
+
+notif_state = {
+    mid: {"streak_label": "Normal", "streak_count": 0, "last_notified_rank": 0, "last_notified_at": None}
+    for mid in ALL_MOTOR_IDS
+}
+notifications_log = deque(maxlen=50)  # newest first
+_notif_id_counter = 0
+
+
+def check_motor_notification(motor_id, condition_label, fault_type, probable_cause):
+    global _notif_id_counter
+    state = notif_state[motor_id]
+    now = datetime.now()
+
+    # Track how many consecutive ticks this motor has held the current label
+    if condition_label == state["streak_label"]:
+        state["streak_count"] += 1
+    else:
+        state["streak_label"] = condition_label
+        state["streak_count"] = 1
+
+    rank = SEVERITY_RANK.get(condition_label, 0)
+    sustained = state["streak_count"] >= SUSTAIN_THRESHOLD
+
+    # Only care about Warning/Critical/Failure, sustained, and worse than last notified
+    if not sustained or rank == 0:
+        return
+
+    is_escalation = rank > state["last_notified_rank"]
+    cooldown_passed = (
+        state["last_notified_at"] is None
+        or (now - state["last_notified_at"]).total_seconds() >= COOLDOWN_SECONDS
+    )
+
+    if is_escalation or cooldown_passed:
+        _notif_id_counter += 1
+        notifications_log.appendleft({
+            "id": _notif_id_counter,
+            "motor_id": motor_id,
+            "severity": condition_label,
+            "title": f"{condition_label} — {motor_id}",
+            "description": f"{fault_type}: {probable_cause}",
+            "time": now.strftime("%H:%M:%S"),
+            "read": False,
+        })
+        state["last_notified_rank"] = rank
+        state["last_notified_at"] = now
 
 # ============================================================
 # HELPER FUNCTIONS
@@ -257,6 +320,15 @@ def advance_all_motors():
     for mid in ALL_MOTOR_IDS:
         motor_row_index[mid] = (motor_row_index.get(mid, 0) + 1) % motor_row_counts[mid]
 
+        row = get_row_for_device(mid)
+        prediction = predict_row(row)
+        check_motor_notification(
+            mid,
+            prediction["condition_label"],
+            prediction["fault_type"],
+            prediction["probable_cause"]
+        )
+
 
 def predict_row(row):
     na_features = row[NA_FEATURE_COLS].values.reshape(1, -1)
@@ -273,7 +345,7 @@ def predict_row(row):
     condition_label = condition_clf.predict(sh_scaled)[0]
 
     rul_pred = float(row["sn_rul_hours"])
-    ml_health = float(np.clip(row["sn_health_score"], 0, 100))
+    ml_health = float(np.clip(row["sn_health_score_smooth"], 0, 100))
 
     threshold = Threshold.query.first()
 
@@ -356,7 +428,7 @@ def get_status():
         "false_alarm_rate": 0.02,
         "temperature": float(row["Temperature"]),
         "vibration": get_vibration_rms(row),
-        "current": get_avg_voltage(row),
+        "voltage": get_avg_voltage(row),
         "pressure": float(row["Rotational_Speed"]),
         "device": str(row["motor_id"])
     })
@@ -441,6 +513,22 @@ def get_alerts():
 
     return jsonify(alerts[:20])
 
+@app.route("/api/notifications")
+@login_required
+def get_notifications():
+    unread_count = sum(1 for n in notifications_log if not n["read"])
+    return jsonify({
+        "notifications": list(notifications_log),
+        "unread_count": unread_count
+    })
+
+
+@app.route("/api/notifications/read", methods=["POST"])
+@login_required
+def mark_notifications_read():
+    for n in notifications_log:
+        n["read"] = True
+    return jsonify({"status": "ok"})
 
 @app.route("/api/motors")
 @login_required
@@ -489,7 +577,7 @@ def get_sensors():
             "motor_name": f"Induction Motor {row['motor_id']}",
             "temperature": float(row["Temperature"]),
             "vibration": get_vibration_rms(row),
-            "current": get_avg_voltage(row),
+            "voltage": get_avg_voltage(row),
             "pressure": float(row["Rotational_Speed"]),
             "status": status,
             "fault_type": prediction["fault_type"]
@@ -749,6 +837,38 @@ with app.app_context():
         db.session.commit()
         print("Default admin created -> username: admin | password: admin123")
 
+# ============================================================
+# CHATBOT INTEGRATION (Ollama LLM)
+# ============================================================
+llm_sessions = {}
+_chatbot_system_prompt = build_system_prompt()  # built once at startup
+
+
+@app.route("/api/chat/llm", methods=["POST"])
+@login_required
+def chat_llm():
+    sid = str(current_user.id)
+    user_input = request.json.get("message", "")
+
+    if sid not in llm_sessions:
+        llm_sessions[sid] = LLMConversationContext()
+
+    result = chatbot_response_llm(
+        user_input,
+        llm_sessions[sid],
+        _chatbot_system_prompt,
+        print_streaming=False
+    )
+    return jsonify(result)
+
+
+@app.route("/api/chat/llm/save", methods=["POST"])
+@login_required
+def save_llm_chat():
+    sid = str(current_user.id)
+    if sid in llm_sessions:
+        save_history(llm_sessions[sid])
+    return jsonify({"status": "saved"})
 
 if __name__ == "__main__":
     app.run(debug=True, port=5000)

@@ -10,3 +10,4 @@ reportlab==4.1.0
 matplotlib==3.8.0
 xgboost==2.0.3
 statsmodels==0.14.1
+requests==2.31.0

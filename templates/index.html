@@ -25,25 +25,43 @@
                     <span class="text">Dashboard</span>
                 </a>
             </li>
+
+            <li class="nav-item" data-tab="forecast" onclick="switchTab('forecast', this)">
+                <a href="#forecast">
+                    <span class="icon"><i class="fa-solid fa-chart-line"></i></span>
+                    <span class="text">Forecast</span>
+                </a>
+            </li>
+
             <li class="nav-item" data-tab="assets" onclick="switchTab('assets', this)">
                 <a href="#assets">
                     <span class="icon"><i class="fa-solid fa-microchip"></i></span>
                     <span class="text">Motor Assets</span>
                 </a>
             </li>
+
             <li class="nav-item" data-tab="sensors" onclick="switchTab('sensors', this)">
                 <a href="#sensors">
                     <span class="icon"><i class="fa-solid fa-wave-square"></i></span>
                     <span class="text">Sensor Data</span>
                 </a>
             </li>
+
             <li class="nav-item" data-tab="alerts" onclick="switchTab('alerts', this)">
                 <a href="#alerts">
                     <span class="icon"><i class="fa-solid fa-triangle-exclamation"></i></span>
                     <span class="text">AI Alerts</span>
                 </a>
             </li>
+
             {% if is_admin %}
+            <li class="nav-item" data-tab="training" onclick="switchTab('training', this)">
+                <a href="#training">
+                    <span class="icon"><i class="fa-solid fa-database"></i></span>
+                    <span class="text">Data Training</span>
+                </a>
+            </li>
+
             <li class="nav-item" data-tab="settings" onclick="switchTab('settings', this)">
                 <a href="#settings">
                     <span class="icon"><i class="fa-solid fa-gear"></i></span>
@@ -177,6 +195,9 @@
                                 <div class="param-label">Temperature</div>
                                 <div class="param-value" id="val-temperature">58.2 <span class="unit">C</span></div>
                             </div>
+                            <div class="param-threshold-hint" style="font-size:10px;color:var(--text-muted);">
+                                Threshold: --
+                            </div>
                             <div class="spark-wrap">
                                 <canvas id="spark-temp"></canvas>
                             </div>
@@ -199,11 +220,12 @@
                             </button>
                         </div>
 
+                        <!-- FIX: Changed id from val-current to val-voltage -->
                         <div class="card glass-card param-card">
                             <div class="param-icon curr"><i class="fa-solid fa-bolt"></i></div>
                             <div class="param-info">
                                 <div class="param-label">Voltage (Avg)</div>
-                                <div class="param-value" id="val-current">-- <span class="unit">V</span></div>
+                                <div class="param-value" id="val-voltage">-- <span class="unit">V</span></div>
                             </div>
                             <div class="spark-wrap">
                                 <canvas id="spark-volt"></canvas>
@@ -278,7 +300,17 @@
                         </div>
                     </div>
                 </div>
+            </div>
 
+            <!-- FORECAST & THRESHOLD -->
+            <div class="page-section" id="page-forecast" style="display: none;">
+                <div class="card glass-card">
+                    <div class="card-header"><h3>Historical vs Forecast per Parameter</h3></div>
+                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">
+                    Left: latest actual data. Right: forward projections from the forecast engine model.
+                    </p>
+                    <div class="forecast-compare-grid" id="forecast-compare-grid"></div>
+                </div>
             </div>
 
             <!-- MOTOR ASSETS -->
@@ -358,8 +390,9 @@
                                 <th>Motor</th>
                                 <th><i class="fa-solid fa-temperature-half"></i> Temp (C)</th>
                                 <th><i class="fa-solid fa-wave-square"></i> Vibration (mm/s)</th>
-                                <th><i class="fa-solid fa-bolt"></i> Current (A)</th>
-                                <th><i class="fa-solid fa-gauge"></i> Pressure (bar)</th>
+                                <!-- FIX: Changed labels from Current/Pressure to Voltage/RPM -->
+                                <th><i class="fa-solid fa-bolt"></i> Voltage (V)</th>
+                                <th><i class="fa-solid fa-gauge"></i> Rotational Speed (RPM)</th>
                                 <th>Status</th>
                             </tr>
                         </thead>
@@ -367,44 +400,7 @@
                         </tbody>
                     </table>
                 </div>
-
-                <div class="card glass-card chart-container" id="full-chart-container" style="height: 300px; margin-top: 24px;">
-                    <div class="card-header">
-                        <h3>Historical Parameter Trend</h3>
-                        <div class="card-header-actions">
-                            <button class="icon-toggle-btn" onclick="toggleChart('full-chart-container', this)" title="Collapse/Expand">
-                                <i class="fa-solid fa-chevron-up"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="chart-body">
-                        <canvas id="sensorChartFull"></canvas>
-                    </div>
-                </div>
-
-                <div class="card glass-card chart-container" id="forecast-chart-container" style="height: 300px; margin-top: 24px;">
-                    <div class="card-header">
-                        <h3>Forecasted Health & RUL Trend</h3>
-                        <div class="card-header-actions">
-                            <button class="icon-toggle-btn" onclick="toggleChart('forecast-chart-container', this)">
-                                <i class="fa-solid fa-chevron-up"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="chart-body">
-                        <canvas id="forecastChart"></canvas>
-                    </div>
-                </div>
-
-                <div class="card glass-card" style="margin-top: 24px;">
-                    <div class="card-header">
-                        <h3>Sensor-level Forecast Detail</h3>
-                        <button class="btn-outline" onclick="toggleSensorDetail()" id="sensor-detail-toggle">Hide detail</button>
-                    </div>
-                    <p style="font-size:12px;color:var(--text-muted);margin-bottom:16px;">Underlying sensor trends the health forecast above is derived from.</p>
-                    <div class="params-row" id="sensor-forecast-grid" style="grid-template-columns:repeat(3,1fr);"></div>
-                </div>
-            </div>
+            </div>    
 
             <!-- AI ALERTS -->
             <div class="page-section" id="page-alerts" style="display: none;">
@@ -425,6 +421,17 @@
             </div>
 
             {% if is_admin %}
+
+            <!-- DATA TRAINING -->
+            <div class="page-section" id="page-training" style="display: none;">
+                <div class="card glass-card">
+                    <div class="card-header"><h3>Update Data Training</h3></div>
+                    <p style="font-size:12px;color:var(--text-muted);">
+                        New training data upload/insert feature (awaiting final specifications).
+                    </p>
+                </div>
+            </div>
+
             <!-- SETTINGS (admin only) -->
             <div class="page-section" id="page-settings" style="display: none;">
                 <div class="settings-grid">
@@ -498,6 +505,8 @@
                         </div>
                         <button class="btn-action" style="margin-top: 8px;" onclick="saveConfiguration()">Save Configuration</button>
                     </div>
+                    <!-- End of AI Model Configuration card -->
+
                 </div>
             </div>
             {% endif %}
@@ -581,6 +590,26 @@
                 <button class="btn-action" id="modal-confirm-btn">OK</button>
                 <button class="btn-outline" id="modal-cancel-btn" style="display:none;">Cancel</button>
             </div>
+        </div>
+    </div>
+
+    <!-- CHATBOT WIDGET -->
+    <div id="chatbot-toggle-btn">
+        <i class="fa-solid fa-comment-dots"></i>
+    </div>
+
+    <div id="chatbot-widget" class="glass-card">
+        <div class="chatbot-header">
+            <div class="chatbot-header-title">
+                <span class="pulse-dot" style="width:8px;height:8px;"></span>
+                <span>Maintenance Assistant</span>
+            </div>
+            <button id="chatbot-close-btn"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div id="chatbot-messages" class="chatbot-messages"></div>
+        <div class="chatbot-input-row">
+            <input type="text" id="chatbot-input" placeholder="Ask about motor status..." autocomplete="off">
+            <button id="chatbot-send-btn"><i class="fa-solid fa-paper-plane"></i></button>
         </div>
     </div>
 
