@@ -1110,12 +1110,22 @@ function combineVoltageAvg(sensors) {
 }
 
 function loadForecastComparePage() {
+    const grid = document.getElementById('forecast-compare-grid');
+    
+    // --- FITUR BARU: Tambahkan efek loading sebelum memanggil API ---
+    grid.innerHTML = `
+        <div style="text-align: center; padding: 60px 20px; color: var(--primary-orange);">
+            <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 32px; margin-bottom: 16px;"></i>
+            <p style="color: var(--text-muted); font-size: 14px;">Generating live AI forecast for the next 48 hours...</p>
+        </div>
+    `;
+
     const historyUrl = currentDevice ? `/api/history?device=${encodeURIComponent(currentDevice)}&points=30` : '/api/history?points=30';
     const forecastUrl = currentDevice ? `/api/forecast?device=${encodeURIComponent(currentDevice)}&horizon=48` : '/api/forecast?horizon=48';
 
     Promise.all([fetch(historyUrl).then(r => r.json()), fetch(forecastUrl).then(r => r.json())])
         .then(([hist, fcst]) => {
-            const grid = document.getElementById('forecast-compare-grid');
+            // Bersihkan indikator loading setelah data dari backend tiba
             grid.innerHTML = '';
 
             const fcstVibration = combineVibrationRMS(fcst.sensors);
@@ -1140,7 +1150,10 @@ function loadForecastComparePage() {
                 setTimeout(() => renderComboChart(`fcst-combo-${p.key}`, hist.labels, p.histData, fcst.labels, p.fcstData, p.color), 0);
             });
         })
-        .catch(err => console.error('Error loading forecast compare page:', err));
+        .catch(err => {
+            console.error('Error loading forecast compare page:', err);
+            grid.innerHTML = '<div style="text-align:center; padding: 20px; color: var(--danger);">Failed to load forecast data.</div>';
+        });
 }
 
 function renderComboChart(canvasId, histLabels, histData, fcstLabels, fcstData, color) {
