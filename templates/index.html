@@ -236,6 +236,20 @@
                         </div>
 
                         <div class="card glass-card param-card">
+                            <div class="param-icon amps"><i class="fa-solid fa-plug-circle-bolt"></i></div>
+                            <div class="param-info">
+                                <div class="param-label">Current (Avg)</div>
+                                <div class="param-value" id="val-current">-- <span class="unit">A</span></div>
+                            </div>
+                            <div class="spark-wrap">
+                                <canvas id="spark-current"></canvas>
+                            </div>
+                            <button class="param-expand-btn" onclick="toggleParamDetail('current', this)">
+                                <i class="fa-solid fa-chevron-down"></i>
+                            </button>
+                        </div>
+
+                        <div class="card glass-card param-card">
                             <div class="param-icon press"><i class="fa-solid fa-gauge"></i></div>
                             <div class="param-info">
                                 <div class="param-label">Rotational Speed</div>
@@ -259,6 +273,9 @@
                     </div>
                     <div class="param-detail-panel" id="detail-volt">
                         <canvas id="spark-volt-full"></canvas>
+                    </div>
+                    <div class="param-detail-panel" id="detail-current">
+                        <canvas id="spark-current-full"></canvas>
                     </div>
                     <div class="param-detail-panel" id="detail-rpm">
                         <canvas id="spark-rpm-full"></canvas>
@@ -284,7 +301,7 @@
                         </div>
                         <div class="insight-item">
                             <span class="insight-label">Patterns Monitored</span>
-                            <span class="insight-value">4 Parameters</span>
+                            <span class="insight-value">5 Parameters</span>
                         </div>
                         <div class="insight-item">
                             <span class="insight-label">Correlation Confidence</span>
@@ -390,8 +407,8 @@
                                 <th>Motor</th>
                                 <th><i class="fa-solid fa-temperature-half"></i> Temp (C)</th>
                                 <th><i class="fa-solid fa-wave-square"></i> Vibration (mm/s)</th>
-                                <!-- FIX: Changed labels from Current/Pressure to Voltage/RPM -->
                                 <th><i class="fa-solid fa-bolt"></i> Voltage (V)</th>
+                                <th><i class="fa-solid fa-plug-circle-bolt"></i> Current (A)</th>
                                 <th><i class="fa-solid fa-gauge"></i> Rotational Speed (RPM)</th>
                                 <th>Status</th>
                             </tr>
@@ -551,6 +568,10 @@
                     <label class="report-field-item">
                         <input type="checkbox" class="round-check report-field" value="voltage" checked>
                         Voltage
+                    </label>
+                    <label class="report-field-item">
+                        <input type="checkbox" class="round-check report-field" value="current" checked>
+                        Current
                     </label>
                     <label class="report-field-item">
                         <input type="checkbox" class="round-check report-field" value="rpm" checked>

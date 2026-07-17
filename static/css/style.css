@@ -114,12 +114,20 @@ body{background-color:#000;color:var(--text-main);height:100vh;overflow:hidden}
 
 /* Parameter row */
 .params-row-wrapper{display:flex;flex-direction:column;gap:var(--gap-lg)}
-.params-row{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--gap-lg)}
-.param-card{display:flex;align-items:center;gap:8px;padding:16px 16px;position:relative}
+.params-row{display:grid;grid-template-columns:repeat(5,1fr);gap:var(--gap-lg)}
+.param-card {
+    display: flex;
+    flex-wrap: wrap; 
+    align-items: center;
+    gap: 8px;
+    padding: 16px 16px;
+    position: relative;
+}
 .param-icon{width:42px;height:42px;border-radius:var(--radius-md);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
 .param-icon.temp{background:rgba(249,115,22,.12);color:var(--primary-orange)}
 .param-icon.vib{background:rgba(168,85,247,.12);color:#a855f7}
 .param-icon.curr{background:rgba(56,189,248,.12);color:var(--info)}
+.param-icon.amps{background:rgba(234,179,8,.12);color:#eab308}
 .param-icon.press{background:rgba(34,197,94,.12);color:var(--success)}
 .param-label{font-size:12px;color:var(--text-muted);margin-bottom:4px}
 .param-value{font-size:18px;font-weight:700;white-space:nowrap;display:flex;align-items:baseline;gap:4px;}
@@ -127,7 +135,14 @@ body{background-color:#000;color:var(--text-main);height:100vh;overflow:hidden}
 .param-info{flex:1;min-width:0}
 
 /* Sparkline wrapper */
-.spark-wrap{width:70px;height:36px;flex-shrink:0;overflow:hidden;position:relative}
+.spark-wrap {
+    width: 100%;
+    height: 45px; 
+    margin-top: 8px; 
+    flex-shrink: 0;
+    overflow: hidden;
+    position: relative;
+}
 .spark-wrap canvas{position:absolute;inset:0;width:100%!important;height:100%!important}
 
 /* Param expand button */
@@ -301,6 +316,11 @@ body{background-color:#000;color:var(--text-main);height:100vh;overflow:hidden}
         padding: 16px;
     }
 }
+
+@media (max-width: 1200px) {
+    .params-row{grid-template-columns:repeat(3,1fr)}
+}
+
 .round-check{appearance:none;-webkit-appearance:none;width:18px;height:18px;border-radius:50%;border:2px solid var(--border-color);background:transparent;cursor:pointer;flex-shrink:0;position:relative;transition:.15s}
 .round-check:checked{background:var(--primary-orange);border-color:var(--primary-orange)}
 .round-check:checked::after{content:"";position:absolute;top:5px;left:5px;width:4px;height:4px;background:#fff;border-radius:50%}

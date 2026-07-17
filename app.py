@@ -72,9 +72,12 @@ condition_clf = joblib.load(os.path.join(MODEL_DIR, "condition_classifier.joblib
 sh_scaler = joblib.load(os.path.join(MODEL_DIR, "condition_scaler.joblib"))
 
 SH_FEATURE_COLS = [
-    "Voltage_L1", "Voltage_L2", "Voltage_L3", "Frequency", "Power_Factor",
-    "Temperature", "Vibration_X", "Vibration_Y", "Vibration_Z", "Rotational_Speed",
-    "Voltage_Imbalance", "Vibration_Total", "Voltage_Mean", "RPM_Deviation"
+    "Voltage_L1", "Voltage_L2", "Voltage_L3",
+    "Current_L1", "Current_L2", "Current_L3",
+    "Frequency", "Power_Factor", "Temperature",
+    "Vibration_X", "Vibration_Y", "Vibration_Z", "Rotational_Speed",
+    "Voltage_Imbalance_Pct", "Current_Imbalance_Pct",
+    "Vibration_Total", "Voltage_Mean", "Current_Mean", "RPM_Deviation"
 ]
 
 # ============================================================
@@ -86,25 +89,26 @@ SH_FEATURE_COLS = [
 # per-motor. These extra columns are computed once at startup below
 # and cached on `df`, so no per-request feature engineering is needed.
 # ============================================================
-sn_rul_model = joblib.load(os.path.join(MODEL_DIR, "rul_v2.joblib"))
-sn_health_model = joblib.load(os.path.join(MODEL_DIR, "health_v2.joblib"))
+sn_scaler = joblib.load(os.path.join(MODEL_DIR, "condition_scaler_v2_with_current.joblib"))
+sn_rul_model = joblib.load(os.path.join(MODEL_DIR, "rul_iso.joblib"))
+sn_health_model = joblib.load(os.path.join(MODEL_DIR, "health_iso.joblib"))
 
 SN_SENSOR_COLS = [
     "Voltage_L1", "Voltage_L2", "Voltage_L3",
+    "Current_L1", "Current_L2", "Current_L3",
     "Frequency", "Power_Factor", "Temperature",
     "Vibration_X", "Vibration_Y", "Vibration_Z",
     "Rotational_Speed",
 ]
-SN_ENGINEERED_BASE = ["Voltage_Imbalance", "Vibration_Total", "Voltage_Mean", "RPM_Deviation"]
+SN_ENGINEERED_BASE = ["Voltage_Imbalance", "Current_Imbalance", "Vibration_Total", "Voltage_Mean", "RPM_Deviation"]
 SN_FEATURE_COLS = SN_SENSOR_COLS + SN_ENGINEERED_BASE
-
 SN_SHORT_WINDOW = 4
 SN_LONG_WINDOW = 96
 
 
 def sn_add_scaled_features(data: pd.DataFrame) -> pd.DataFrame:
     data = data.copy()
-    scaled = sh_scaler.transform(data[SN_FEATURE_COLS])
+    scaled = sn_scaler.transform(data[SN_FEATURE_COLS])
     for i, col in enumerate(SN_FEATURE_COLS):
         data[f"{col}_scaled"] = scaled[:, i]
     return data
@@ -187,7 +191,18 @@ def engineer_features(data: pd.DataFrame, short_window=4, long_window=24) -> pd.
     v_max_dev = data[["Voltage_L1", "Voltage_L2", "Voltage_L3"]].sub(v_mean, axis=0).abs().max(axis=1)
     data["Voltage_Imbalance_Pct"] = (v_max_dev / v_mean) * 100
 
-    feature_cols = ["Temperature", "Vibration_RMS_Combined", "Rotational_Speed", "Voltage_Imbalance_Pct"]
+    # NEW: current signature analysis, strongest signal for Rotor Bar fault
+    data["Current_RMS_Combined"] = np.sqrt(
+        data["Current_L1"]**2 + data["Current_L2"]**2 + data["Current_L3"]**2
+    )
+    i_mean = data[["Current_L1", "Current_L2", "Current_L3"]].mean(axis=1)
+    i_max_dev = data[["Current_L1", "Current_L2", "Current_L3"]].sub(i_mean, axis=0).abs().max(axis=1)
+    data["Current_Imbalance_Pct"] = (i_max_dev / i_mean) * 100
+
+    feature_cols = [
+        "Temperature", "Vibration_RMS_Combined", "Rotational_Speed", "Voltage_Imbalance_Pct",
+        "Current_RMS_Combined", "Current_Imbalance_Pct",
+    ]
 
     grouped = data.groupby("motor_id")
     for col in feature_cols:
@@ -197,7 +212,6 @@ def engineer_features(data: pd.DataFrame, short_window=4, long_window=24) -> pd.
         data[f"{col}_delta"] = grouped[col].diff().fillna(0)
 
     return data
-
 
 # ============================================================
 # LOAD AND PREPARE DATA
@@ -210,9 +224,20 @@ df = df.sort_values(["motor_id", "timestamp"]).reset_index(drop=True)
 df = engineer_features(df)
 
 df["Voltage_Imbalance"] = df[["Voltage_L1", "Voltage_L2", "Voltage_L3"]].std(axis=1)
+df["Current_Imbalance"] = df[["Current_L1", "Current_L2", "Current_L3"]].std(axis=1)
 df["Vibration_Total"] = np.sqrt(df["Vibration_X"]**2 + df["Vibration_Y"]**2 + df["Vibration_Z"]**2)
 df["Voltage_Mean"] = df[["Voltage_L1", "Voltage_L2", "Voltage_L3"]].mean(axis=1)
+df["Current_Mean"] = df[["Current_L1", "Current_L2", "Current_L3"]].mean(axis=1)
 df["RPM_Deviation"] = abs(df["Rotational_Speed"] - 1500)
+
+# NEMA MG-1 style %imbalance for Salsa's condition classifier
+_v_mean = df[["Voltage_L1", "Voltage_L2", "Voltage_L3"]].mean(axis=1)
+_v_dev = df[["Voltage_L1", "Voltage_L2", "Voltage_L3"]].sub(_v_mean, axis=0).abs().max(axis=1)
+df["Voltage_Imbalance_Pct"] = (_v_dev / _v_mean) * 100
+
+_i_mean = df[["Current_L1", "Current_L2", "Current_L3"]].mean(axis=1)
+_i_dev = df[["Current_L1", "Current_L2", "Current_L3"]].sub(_i_mean, axis=0).abs().max(axis=1)
+df["Current_Imbalance_Pct"] = (_i_dev / _i_mean) * 100
 
 df = sn_add_scaled_features(df)
 df = sn_add_temporal_features(df)
@@ -308,6 +333,10 @@ def get_avg_voltage(row):
 
 def get_vibration_rms(row):
     return round(math.sqrt(row["Vibration_X"]**2 + row["Vibration_Y"]**2 + row["Vibration_Z"]**2), 2)
+
+
+def get_avg_current(row):
+    return round((row["Current_L1"] + row["Current_L2"] + row["Current_L3"]) / 3.0, 2)
 
 
 def get_row_for_device(device_id):
@@ -429,6 +458,7 @@ def get_status():
         "temperature": float(row["Temperature"]),
         "vibration": get_vibration_rms(row),
         "voltage": get_avg_voltage(row),
+        "current": get_avg_current(row),
         "pressure": float(row["Rotational_Speed"]),
         "device": str(row["motor_id"])
     })
@@ -447,6 +477,7 @@ def get_history():
         "temperature": motor_df["Temperature"].round(1).tolist(),
         "vibration": [get_vibration_rms(row) for _, row in motor_df.iterrows()],
         "voltage": [get_avg_voltage(row) for _, row in motor_df.iterrows()],
+        "current": [get_avg_current(row) for _, row in motor_df.iterrows()],
         "rpm": motor_df["Rotational_Speed"].round(1).tolist()
     })
 
@@ -578,6 +609,7 @@ def get_sensors():
             "temperature": float(row["Temperature"]),
             "vibration": get_vibration_rms(row),
             "voltage": get_avg_voltage(row),
+            "current": get_avg_current(row),
             "pressure": float(row["Rotational_Speed"]),
             "status": status,
             "fault_type": prediction["fault_type"]
@@ -640,7 +672,7 @@ def get_forecast():
 
     result = forecast_health_and_rul(
         history_df, horizon,
-        scaler=sh_scaler, rul_model=sn_rul_model, health_model=sn_health_model
+        scaler=sn_scaler, rul_model=sn_rul_model, health_model=sn_health_model
     )
 
     smooth_window = 8
@@ -719,7 +751,7 @@ def reset_settings():
 def generate_report():
     payload = request.get_json()
     selected_motors = payload.get("motors", ALL_MOTOR_IDS)
-    selected_fields = payload.get("fields", ["temperature", "vibration", "voltage", "rpm"])
+    selected_fields = payload.get("fields", ["temperature", "vibration", "voltage", "current", "rpm"])
     include_predictions = payload.get("include_predictions", True)
 
     buffer = io.BytesIO()
@@ -755,6 +787,7 @@ def generate_report():
             "temperature": ("Temperature (C)", str(round(float(row["Temperature"]), 1))),
             "vibration": ("Vibration RMS (mm/s)", str(get_vibration_rms(row))),
             "voltage": ("Voltage Avg (V)", str(get_avg_voltage(row))),
+            "current": ("Current Avg (A)", str(get_avg_current(row))),
             "rpm": ("Rotational Speed (RPM)", str(round(float(row["Rotational_Speed"]), 1))),
         }
         for f in selected_fields:
@@ -792,6 +825,7 @@ def generate_report():
             ("temperature", "Temperature", motor_hist["Temperature"], "#f97316"),
             ("vibration", "Vibration RMS", [get_vibration_rms(r) for _, r in motor_hist.iterrows()], "#a855f7"),
             ("voltage", "Voltage Avg", [get_avg_voltage(r) for _, r in motor_hist.iterrows()], "#38bdf8"),
+            ("current", "Current Avg", [get_avg_current(r) for _, r in motor_hist.iterrows()], "#eab308"),
             ("rpm", "Rotational Speed", motor_hist["Rotational_Speed"], "#22c55e"),
         ]
 

@@ -1,0 +1,22 @@
+{
+  "Normal": {
+    "Probable_Cause": "-",
+    "Recommended_Action": "Normal condition, continue routine monitoring"
+  },
+  "Stator Winding": {
+    "Probable_Cause": "Winding insulation degradation from repeated overheating or moisture contamination",
+    "Recommended_Action": "Perform insulation resistance test (megger) and check the cooling system"
+  },
+  "Bearing Wear": {
+    "Probable_Cause": "Inadequate lubrication, contamination, or bearing wear from excessive load",
+    "Recommended_Action": "Re-lubricate or replace the bearing, check seal condition and shaft alignment"
+  },
+  "Rotor Bar": {
+    "Probable_Cause": "Broken/cracked rotor bar due to repeated thermal stress or excessive starting frequency",
+    "Recommended_Action": "Perform motor current signature analysis (MCSA) and schedule rotor inspection/teardown"
+  },
+  "Misalignment": {
+    "Probable_Cause": "Motor shaft misaligned with the driven load/coupling",
+    "Recommended_Action": "Perform laser alignment check and correct the motor mounting position"
+  }
+}

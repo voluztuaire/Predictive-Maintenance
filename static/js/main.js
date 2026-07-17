@@ -126,9 +126,10 @@ function initChart() {
                 data: {
                     labels: data.labels,
                     datasets: [
-                        { label: 'Temperature (C)', data: data.temperature, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', borderWidth: 2, tension: 0.4, fill: true, yAxisID: 'y' },
-                        { label: 'Vibration (mm/s)', data: data.vibration, borderColor: '#a855f7', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'y' },
-                        { label: 'Voltage (V)', data: data.voltage, borderColor: '#38bdf8', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'y1' }
+                        { label: 'Temperature (C)', data: data.temperature, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', borderWidth: 2, tension: 0.4, fill: true, yAxisID: 'yTemp' },
+                        { label: 'Vibration (mm/s)', data: data.vibration, borderColor: '#a855f7', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yVib' },
+                        { label: 'Voltage (V)', data: data.voltage, borderColor: '#38bdf8', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yVolt' },
+                        { label: 'Current (A)', data: data.current, borderColor: '#eab308', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yCurr' }
                     ]
                 },
                 options: {
@@ -136,8 +137,10 @@ function initChart() {
                     maintainAspectRatio: false,
                     plugins: { legend: { labels: { color: '#9ca3af', boxWidth: 12, padding: 16 } } },
                     scales: {
-                        y: { position: 'left', grid: { color: '#262626' }, ticks: { color: '#9ca3af' }, title: { display: true, text: 'Temp / Vibration', color: '#9ca3af' } },
-                        y1: { position: 'right', grid: { display: false }, ticks: { color: '#38bdf8' }, title: { display: true, text: 'Voltage (V)', color: '#38bdf8' } },
+                        yTemp: { position: 'left', grid: { color: '#262626' }, ticks: { color: '#f97316' }, title: { display: true, text: 'Temp (C)', color: '#f97316' } },
+                        yVib: { position: 'left', display: false, min: 0, max: 10 },
+                        yVolt: { position: 'right', grid: { display: false }, ticks: { color: '#38bdf8' }, title: { display: true, text: 'Voltage (V)', color: '#38bdf8' }, min: 380, max: 410 },
+                        yCurr: { position: 'right', display: false, min: 0, max: 12 },
                         x: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' } }
                     }
                 }
@@ -216,9 +219,8 @@ function renderFullSpark(paramKey) {
     fetch(url)
         .then(r => r.json())
         .then(data => {
-            const colorMap = { temp: '#f97316', vib: '#a855f7', volt: '#38bdf8', rpm: '#22c55e' };
-            const fieldMap = { temp: 'temperature', vib: 'vibration', volt: 'voltage', rpm: 'rpm' };
-            const canvasId = 'spark-' + paramKey + '-full';
+            const colorMap = { temp: '#f97316', vib: '#a855f7', volt: '#38bdf8', current: '#eab308', rpm: '#22c55e' };
+            const fieldMap = { temp: 'temperature', vib: 'vibration', volt: 'voltage', current: 'current', rpm: 'rpm' };            const canvasId = 'spark-' + paramKey + '-full';
 
             if (fullSparkCharts[canvasId]) fullSparkCharts[canvasId].destroy();
 
@@ -287,6 +289,7 @@ function fetchAndUpdateMetrics() {
             document.getElementById('val-temperature').innerHTML = data.temperature + ' <span class="unit">C</span>';
             document.getElementById('val-vibration').innerHTML = data.vibration + ' <span class="unit">mm/s</span>';
             document.getElementById('val-voltage').innerHTML = data.voltage + ' <span class="unit">V</span>';
+            document.getElementById('val-current').innerHTML = data.current + ' <span class="unit">A</span>';
             document.getElementById('val-pressure').innerHTML = data.pressure + ' <span class="unit">RPM</span>';
             document.getElementById('val-recommendation').innerText = data.recommendation || 'System operating within normal parameters.';
 
@@ -425,13 +428,13 @@ function loadSensors() {
                     <td>${s.temperature}</td>
                     <td>${s.vibration}</td>
                     <td>${s.voltage}</td>
+                    <td>${s.current}</td>
                     <td>${s.pressure}</td>
                     <td><span class="status-pill ${s.status}"><span class="dot"></span>${s.status}</span></td>
                 `;
                 body.appendChild(tr);
             });
             initFullChart();
-            initForecastChart();   
         })
         .catch(error => console.error('Error loading sensors:', error));
 }
@@ -598,6 +601,12 @@ function selectDevice(deviceId) {
     currentDevice = deviceId;
     fetchAndUpdateMetrics();
     fetchAndRenderAlerts();
+    loadSensors();
+    loadLogs();
+    const forecastPage = document.getElementById('page-forecast');
+    if (forecastPage && forecastPage.style.display !== 'none') {
+        loadForecastComparePage();
+    }
 }
 
 function refreshData() {
@@ -732,6 +741,7 @@ function loadSparklines() {
             renderSparkline('spark-temp', data.labels, data.temperature, '#f97316');
             renderSparkline('spark-vib', data.labels, data.vibration, '#a855f7');
             renderSparkline('spark-volt', data.labels, data.voltage, '#38bdf8');
+            renderSparkline('spark-current', data.labels, data.current, '#eab308');
             renderSparkline('spark-rpm', data.labels, data.rpm, '#22c55e');
         })
         .catch(error => console.error('Error loading sparklines:', error));

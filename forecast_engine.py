@@ -24,16 +24,11 @@ from statsmodels.tsa.holtwinters import ExponentialSmoothing
 import warnings
 warnings.filterwarnings("ignore")  # statsmodels convergence warnings on short/noisy series
 
+from feature_utils import SENSOR_COLS
+
 SAMPLES_PER_HOUR = 4      # 15-min sampling
 SEASONAL_PERIOD = 96      # 24h daily cycle
 MIN_SAMPLES_FOR_SEASONAL = 192   # 48h minimum for a seasonal fit to be meaningful
-
-SENSOR_COLS = [
-    'Voltage_L1', 'Voltage_L2', 'Voltage_L3',
-    'Frequency', 'Power_Factor', 'Temperature',
-    'Vibration_X', 'Vibration_Y', 'Vibration_Z',
-    'Rotational_Speed',
-]
 
 
 def forecast_single_sensor(series: np.ndarray, horizon: int) -> np.ndarray:

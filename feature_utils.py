@@ -12,21 +12,25 @@ import pandas as pd
 
 SENSOR_COLS = [
     'Voltage_L1', 'Voltage_L2', 'Voltage_L3',
+    'Current_L1', 'Current_L2', 'Current_L3',
     'Frequency', 'Power_Factor', 'Temperature',
     'Vibration_X', 'Vibration_Y', 'Vibration_Z',
     'Rotational_Speed',
 ]
-ENGINEERED_BASE = ['Voltage_Imbalance', 'Vibration_Total', 'Voltage_Mean', 'RPM_Deviation']
-FEATURE_COLS = SENSOR_COLS + ENGINEERED_BASE  # the 14 features teammate specified
+ENGINEERED_BASE = ['Voltage_Imbalance', 'Current_Imbalance', 'Vibration_Total',
+                    'Voltage_Mean', 'RPM_Deviation']
+FEATURE_COLS = SENSOR_COLS + ENGINEERED_BASE  # 13 sensors + 5 engineered = 18 total
 
 SHORT_WINDOW = 4     # 1h at 15-min sampling
 LONG_WINDOW = 96      # 24h at 15-min sampling
 
 
 def add_teammate_engineered_features(df: pd.DataFrame) -> pd.DataFrame:
-    """The 4 engineered features from the handoff spec."""
+    """The 5 engineered features (4 original + Current_Imbalance, added when
+    Current_L1/L2/L3 became available in the revised dataset)."""
     df = df.copy()
     df['Voltage_Imbalance'] = df[['Voltage_L1', 'Voltage_L2', 'Voltage_L3']].std(axis=1)
+    df['Current_Imbalance'] = df[['Current_L1', 'Current_L2', 'Current_L3']].std(axis=1)
     df['Vibration_Total'] = np.sqrt(df['Vibration_X']**2 + df['Vibration_Y']**2 + df['Vibration_Z']**2)
     df['Voltage_Mean'] = df[['Voltage_L1', 'Voltage_L2', 'Voltage_L3']].mean(axis=1)
     df['RPM_Deviation'] = abs(df['Rotational_Speed'] - 1500)
