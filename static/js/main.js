@@ -588,13 +588,14 @@ function switchTab(tabName, navEl) {
         if (target) target.classList.add('active');
     }
 
-    const pages = ['dashboard', 'forecast', 'assets', 'sensors', 'alerts', 'training', 'settings'];
+    const pages = ['dashboard', 'forecast', 'assets', 'sensors', 'alerts', 'condition', 'training', 'settings'];
     pages.forEach(page => {
         const el = document.getElementById('page-' + page);
         if (el) el.style.display = (page === tabName) ? 'flex' : 'none';
     });
 
     if (tabName === 'forecast') { loadForecastComparePage(); }
+    if (tabName === 'condition') { loadConditionAlerts(); }
 }
 
 function selectDevice(deviceId) {
@@ -1150,16 +1151,51 @@ function renderComboChart(canvasId, histLabels, histData, fcstLabels, fcstData, 
     // Gabung label jadi 1 sumbu X kontinu
     const labels = [...histLabels, ...fcstLabels];
 
-    // Dataset historical: isi nilai asli di bagian awal, null di bagian forecast
+    // Dataset historical dan forecast
     const historicalSeries = [...histData, ...new Array(fcstData.length).fill(null)];
-
-    // Dataset forecast: null di seluruh historical KECUALI titik terakhir historical
-    // (diisi ulang nilai terakhir historical) supaya garis forecast nyambung visual dari situ
     const forecastSeries = [
         ...new Array(histData.length - 1).fill(null),
         histData[histData.length - 1],
         ...fcstData
     ];
+
+    // --- FITUR BARU: Plugin Custom untuk Garis "Sekarang" ---
+    // Titik "sekarang" ada di index terakhir data historis
+    const currentIndex = histData.length - 1; 
+
+    const currentLinePlugin = {
+        id: 'currentLine',
+        afterDraw(chart) {
+            const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
+            const xPos = x.getPixelForValue(currentIndex);
+
+            ctx.save();
+            
+            // 1. Gambar Garis Vertikal Putus-putus
+            ctx.beginPath();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; // Warna garis putih transparan
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 4]); // Format putus-putus
+            ctx.moveTo(xPos, top);
+            ctx.lineTo(xPos, bottom);
+            ctx.stroke();
+
+            // 2. Gambar Titik (Dot) Penanda di bagian atas garis
+            ctx.fillStyle = '#f97316'; // Warna dot orange
+            ctx.beginPath();
+            ctx.arc(xPos, top, 4, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            // 3. Tambahkan teks "CURRENT" kecil di atas
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.font = '10px Inter';
+            ctx.textAlign = 'center';
+            ctx.fillText('CURRENT', xPos, top - 6);
+
+            ctx.restore();
+        }
+    };
+    // --------------------------------------------------------
 
     const ctx = canvas.getContext('2d');
     forecastCompareCharts[canvasId] = new Chart(ctx, {
@@ -1189,6 +1225,9 @@ function renderComboChart(canvasId, histLabels, histData, fcstLabels, fcstData, 
             ]
         },
         options: {
+            layout: {
+                padding: { top: 20 } // Kasih ruang ekstra di atas biar teks "CURRENT" gak kepotong
+            },
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
@@ -1199,6 +1238,46 @@ function renderComboChart(canvasId, histLabels, histData, fcstLabels, fcstData, 
                 x: { grid: { color: '#262626' }, ticks: { color: '#9ca3af', maxTicksLimit: 8 } },
                 y: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' } }
             }
-        }
+        },
+        // Masukkan plugin custom-nya ke sini
+        plugins: [currentLinePlugin] 
     });
+}
+
+function loadConditionAlerts() {
+    fetch('/api/threshold-alerts?all=1')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('condition-alerts-list');
+            container.innerHTML = '';
+
+            if (data.alerts.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-muted); font-size: 12px; padding: 12px 0;">No threshold violations detected across monitored motors.</p>';
+                return;
+            }
+
+            data.alerts.forEach(a => {
+                const violList = a.violations.map(v =>
+                    `<span class="severity-tag ${v.tier}">${v.parameter}: ${v.actual_value} (thr ${v.threshold})</span>`
+                ).join(' ');
+
+                const row = document.createElement('div');
+                row.className = 'log-row';
+                row.innerHTML = `
+                    <div class="log-info">
+                        <div class="icon-box ${a.status_color === 'red' ? 'critical' : a.status_color === 'orange' ? 'warning' : 'info'}">
+                            <i class="fa-solid fa-gauge-high"></i>
+                        </div>
+                        <div>
+                            <h4>${a.condition_label} — ${a.motor_id}</h4>
+                            <div class="viol-list-wrapper">${violList}</div>
+                            <div class="log-meta">${a.timestamp}</div>
+                        </div>
+                    </div>
+                    <span class="severity-tag ${a.condition_label.toLowerCase()}">${a.total_violations} violation(s)</span>
+                `;
+                container.appendChild(row);
+            });
+        })
+        .catch(err => console.error('Error loading condition alerts:', err));
 }

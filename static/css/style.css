@@ -665,3 +665,10 @@ body{background-color:#000;color:var(--text-main);height:100vh;overflow:hidden}
 .forecast-compare-grid{display:flex;flex-direction:column;gap:24px}
 .forecast-param-block h4{font-size:13px;color:var(--text-main);margin-bottom:8px;font-weight:600}
 .forecast-param-chart{height:220px;background:rgba(255,255,255,.02);border:1px solid var(--border-color);border-radius:var(--radius-md);padding:12px;position:relative}
+
+.viol-list-wrapper {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 6px 0;
+}

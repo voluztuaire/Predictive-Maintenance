@@ -149,6 +149,120 @@ def sn_get_feature_columns():
         cols += [sc, f"{sc}_roll_mean_1h", f"{sc}_roll_std_1h", f"{sc}_trend_24h"]
     return cols
 
+# ============================================================
+# CONDITION-BASED MONITORING (Salsa's threshold rules, no ML)
+# ============================================================
+THRESHOLDS = {
+    'Temperature': {'warning': 51.0, 'critical': 57.0, 'failure': 66.0},
+    'Vibration_X': {'warning': 1.80, 'critical': 3.60, 'failure': 5.50},
+    'Vibration_Y': {'warning': 1.80, 'critical': 3.60, 'failure': 5.50},
+    'Vibration_Z': {'warning': 1.90, 'critical': 3.90, 'failure': 5.80},
+    'Voltage_L1_high': {'warning': 403.0, 'critical': 405.0, 'failure': 407.0},
+    'Voltage_L2_high': {'warning': 403.0, 'critical': 405.0, 'failure': 407.0},
+    'Voltage_L3_high': {'warning': 403.0, 'critical': 405.0, 'failure': 407.0},
+    'Voltage_L1_low':  {'warning': 397.0, 'critical': 395.0, 'failure': 393.0},
+    'Voltage_L2_low':  {'warning': 397.0, 'critical': 395.0, 'failure': 393.0},
+    'Voltage_L3_low':  {'warning': 397.0, 'critical': 395.0, 'failure': 393.0},
+    'Current_L1_high': {'warning': 7.3, 'critical': 7.9, 'failure': 9.0},
+    'Current_L2_high': {'warning': 7.3, 'critical': 7.9, 'failure': 9.0},
+    'Current_L3_high': {'warning': 7.3, 'critical': 7.9, 'failure': 9.0},
+    'Frequency_high': {'warning': 50.10, 'critical': 50.15, 'failure': 50.20},
+    'Frequency_low':  {'warning': 49.90, 'critical': 49.85, 'failure': 49.80},
+    'RPM_low': {'warning': 1455.0, 'critical': 1450.0, 'failure': 1445.0},
+    'Voltage_Imbalance_Pct': {'warning': 0.5, 'critical': 1.0, 'failure': 2.5},
+    'Current_Imbalance_Pct': {'warning': 0.6, 'critical': 1.8, 'failure': 3.5},
+}
+
+
+def check_violations(row: dict) -> dict:
+    v = {'warning': [], 'critical': [], 'failure': []}
+
+    def upper(feat, key):
+        val = row.get(feat, 0)
+        t = THRESHOLDS[key]
+        if val > t['failure']: v['failure'].append(feat)
+        elif val > t['critical']: v['critical'].append(feat)
+        elif val > t['warning']: v['warning'].append(feat)
+
+    def lower(feat, key):
+        val = row.get(feat, 9999)
+        t = THRESHOLDS[key]
+        if val < t['failure']: v['failure'].append(f"{feat}(low)")
+        elif val < t['critical']: v['critical'].append(f"{feat}(low)")
+        elif val < t['warning']: v['warning'].append(f"{feat}(low)")
+
+    upper('Temperature', 'Temperature')
+    upper('Vibration_X', 'Vibration_X')
+    upper('Vibration_Y', 'Vibration_Y')
+    upper('Vibration_Z', 'Vibration_Z')
+    upper('Voltage_L1', 'Voltage_L1_high')
+    upper('Voltage_L2', 'Voltage_L2_high')
+    upper('Voltage_L3', 'Voltage_L3_high')
+    upper('Current_L1', 'Current_L1_high')
+    upper('Current_L2', 'Current_L2_high')
+    upper('Current_L3', 'Current_L3_high')
+    upper('Frequency', 'Frequency_high')
+    upper('Voltage_Imbalance_Pct', 'Voltage_Imbalance_Pct')
+    upper('Current_Imbalance_Pct', 'Current_Imbalance_Pct')
+    lower('Voltage_L1', 'Voltage_L1_low')
+    lower('Voltage_L2', 'Voltage_L2_low')
+    lower('Voltage_L3', 'Voltage_L3_low')
+    lower('Frequency', 'Frequency_low')
+    lower('Rotational_Speed', 'RPM_low')
+    return v
+
+
+def assign_threshold_label(row: dict) -> str:
+    viol = check_violations(row)
+    n_f, n_c, n_w = len(viol['failure']), len(viol['critical']), len(viol['warning'])
+    n_t = n_f + n_c + n_w
+    if n_f >= 1 or n_t >= 4: return 'Failure'
+    elif n_c >= 1: return 'Critical'
+    elif n_w >= 1: return 'Warning'
+    else: return 'Normal'
+
+
+def get_threshold_alerts(row) -> dict:
+    """row: a pandas Series from df (must have Voltage_Imbalance_Pct / Current_Imbalance_Pct already computed)."""
+    row_dict = row.to_dict()
+    viol = check_violations(row_dict)
+    condition = assign_threshold_label(row_dict)
+
+    detail = []
+    for tier in ('warning', 'critical', 'failure'):
+        for param in viol[tier]:
+            base = param.replace('(low)', '')
+            actual_val = row_dict.get(base)
+            key = base
+            if base in ('Voltage_L1', 'Voltage_L2', 'Voltage_L3'):
+                key = f"{base}_{'low' if '(low)' in param else 'high'}"
+            elif base == 'Frequency':
+                key = f"Frequency_{'low' if '(low)' in param else 'high'}"
+            elif base == 'Rotational_Speed':
+                key = 'RPM_low'
+            elif base in ('Current_L1', 'Current_L2', 'Current_L3'):
+                key = f"{base}_high"
+            threshold_val = THRESHOLDS.get(key, {}).get(tier)
+            detail.append({
+                'parameter': param,
+                'tier': tier,
+                'actual_value': round(float(actual_val), 3) if actual_val is not None else None,
+                'threshold': threshold_val,
+            })
+
+    color_map = {'Normal': 'green', 'Warning': 'yellow', 'Critical': 'orange', 'Failure': 'red'}
+    n_t = len(viol['warning']) + len(viol['critical']) + len(viol['failure'])
+
+    return {
+        'motor_id': str(row['motor_id']),
+        'timestamp': str(row['timestamp']),
+        'condition_label': condition,
+        'status_color': color_map[condition],
+        'violations': detail,
+        'total_violations': n_t,
+        'is_labeling_candidate': condition != 'Normal',
+        'source': 'threshold_rule',
+    }
 
 # ============================================================
 # RECOMMENDATION TABLE
@@ -481,6 +595,23 @@ def get_history():
         "rpm": motor_df["Rotational_Speed"].round(1).tolist()
     })
 
+@app.route("/api/threshold-alerts")
+@login_required
+def api_threshold_alerts():
+    all_flag = request.args.get("all")
+    if all_flag:
+        alerts = []
+        for mid in ALL_MOTOR_IDS:
+            row = get_row_for_device(mid)
+            result = get_threshold_alerts(row)
+            if result["is_labeling_candidate"]:
+                alerts.append(result)
+        return jsonify({"count": len(alerts), "alerts": alerts})
+
+    device_id = request.args.get("device", ALL_MOTOR_IDS[0])
+    row = get_row_for_device(device_id)
+    result = get_threshold_alerts(row)
+    return jsonify(result)
 
 @app.route("/api/alerts")
 @login_required

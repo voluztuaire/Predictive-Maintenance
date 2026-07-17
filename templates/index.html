@@ -54,6 +54,13 @@
                 </a>
             </li>
 
+            <li class="nav-item" data-tab="condition" onclick="switchTab('condition', this)">
+                <a href="#condition">
+                    <span class="icon"><i class="fa-solid fa-gauge-high"></i></span>
+                    <span class="text">Condition Alerts</span>
+                </a>
+            </li>
+
             {% if is_admin %}
             <li class="nav-item" data-tab="training" onclick="switchTab('training', this)">
                 <a href="#training">
@@ -434,6 +441,17 @@
                         <button class="btn-outline" onclick="loadLogs()">Refresh</button>
                     </div>
                     <div class="log-list" id="logs-list"></div>
+                </div>
+            </div>
+
+            <!-- CONDITION ALERTS (threshold-based, no ML) -->
+            <div class="page-section" id="page-condition" style="display: none;">
+                <div class="card glass-card table-card">
+                    <div class="table-toolbar">
+                        <h3>Condition-Based Monitoring Alerts</h3>
+                        <button class="btn-outline" onclick="loadConditionAlerts()">Refresh</button>
+                    </div>
+                    <div class="log-list" id="condition-alerts-list"></div>
                 </div>
             </div>
 
