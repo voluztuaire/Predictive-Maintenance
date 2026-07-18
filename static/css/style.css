@@ -170,7 +170,18 @@ body{background-color:#000;color:var(--text-main);height:100vh;overflow:hidden}
 .alert-info p{font-size:11px;color:var(--text-muted);line-height:1.4}
 .alert-action{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0}
 .time{font-size:10px;color:var(--text-muted)}
-.btn-action{background:var(--primary-orange);color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600}
+.btn-action {
+    background: var(--primary-orange);
+    color: #fff;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-size: 11px;
+    cursor: pointer;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;    
+}
 .btn-action:hover{background:var(--primary-orange-hover)}
 .insight-card{display:flex;flex-direction:column}
 .insight-item{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border-color);font-size:12px}
@@ -227,7 +238,8 @@ body{background-color:#000;color:var(--text-main);height:100vh;overflow:hidden}
 /* AI log list */
 .log-list{display:flex;flex-direction:column;gap:12px}
 .log-row{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;background:rgba(255,255,255,.025);border-radius:var(--radius-md);border:1px solid rgba(255,255,255,.05);gap:12px}
-.log-info{display:flex;align-items:center;gap:14px;min-width:0}
+.log-info{display:flex;align-items:center;gap:14px;min-width:0;flex:1}
+.log-info > div:not(.icon-box) {flex:1; min-width:0}
 .log-info h4{font-size:13px;margin-bottom:3px;font-weight:600}
 .log-info p{font-size:11px;color:var(--text-muted);line-height:1.4}
 .log-meta{font-size:10px;color:var(--text-muted);margin-top:4px}

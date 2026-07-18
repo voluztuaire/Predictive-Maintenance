@@ -1,4 +1,6 @@
 from xgboost import XGBClassifier
+from expert_validation import submit_for_review, list_reviews, approve_review, reject_review, review_stats
+from retrain_pipeline import run_retraining, get_deployed_model_dir
 from flask import Flask, render_template, jsonify, request, send_file
 from flask_login import LoginManager, login_required, current_user
 import pandas as pd
@@ -515,7 +517,7 @@ def predict_row(row):
 
     fault_info = RECOMMENDATION_TABLE.get(fault_pred, RECOMMENDATION_TABLE["Normal"])
 
-    rul_display = min(rul_pred, 5000)
+    rul_display = max(0, min(rul_pred, 5000))
     rul_days = rul_pred / 24
     if rul_days <= 30:
         risk_window_label = f"Estimated within {round(rul_days)} days"
@@ -611,6 +613,75 @@ def api_threshold_alerts():
     device_id = request.args.get("device", ALL_MOTOR_IDS[0])
     row = get_row_for_device(device_id)
     result = get_threshold_alerts(row)
+    return jsonify(result)
+
+@app.route("/api/expert-review/submit", methods=["POST"])
+@login_required
+def api_submit_review():
+    device_id = request.args.get("device", ALL_MOTOR_IDS[0])
+    row = get_row_for_device(device_id)
+    alert = get_threshold_alerts(row)
+    if not alert["is_labeling_candidate"]:
+        return jsonify({"error": "Motor is currently Normal, nothing to review."}), 400
+    sensor_data = row[SN_SENSOR_COLS].to_dict()
+    review = submit_for_review(alert, sensor_data)
+    return jsonify(review.to_dict())
+
+
+@app.route("/api/expert-review/list")
+@login_required
+def api_list_reviews():
+    status = request.args.get("status", "pending")
+    reviews = list_reviews(status=status if status != "all" else None)
+    return jsonify([r.to_dict() for r in reviews])
+
+
+@app.route("/api/expert-review/approve", methods=["POST"])
+@login_required
+def api_approve_review():
+    if not current_user.is_admin:
+        return jsonify({"error": "Forbidden: admin access required"}), 403
+    payload = request.get_json()
+    review = approve_review(
+        review_id=payload["review_id"],
+        expert_id=current_user.username,
+        expert_label=payload["expert_label"],
+        expert_fault_type=payload["expert_fault_type"],
+        notes=payload.get("notes"),
+    )
+    return jsonify(review.to_dict())
+
+
+@app.route("/api/expert-review/reject", methods=["POST"])
+@login_required
+def api_reject_review():
+    if not current_user.is_admin:
+        return jsonify({"error": "Forbidden: admin access required"}), 403
+    payload = request.get_json()
+    review = reject_review(
+        review_id=payload["review_id"],
+        expert_id=current_user.username,
+        notes=payload.get("notes"),
+    )
+    return jsonify(review.to_dict())
+
+
+@app.route("/api/expert-review/stats")
+@login_required
+def api_review_stats():
+    return jsonify(review_stats())
+
+
+@app.route("/api/admin/retrain", methods=["POST"])
+@login_required
+def api_retrain():
+    if not current_user.is_admin:
+        return jsonify({"error": "Forbidden: admin access required"}), 403
+    
+    result = run_retraining(
+        base_csv="datasets/client_training_dataset.csv", 
+        triggered_by=current_user.username
+    )
     return jsonify(result)
 
 @app.route("/api/alerts")

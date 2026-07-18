@@ -596,6 +596,7 @@ function switchTab(tabName, navEl) {
 
     if (tabName === 'forecast') { loadForecastComparePage(); }
     if (tabName === 'condition') { loadConditionAlerts(); }
+    if (tabName === 'training') { loadReviewQueue(); }
 }
 
 function selectDevice(deviceId) {
@@ -1050,7 +1051,10 @@ function renderSensorForecastGrid(sensors) {
     function addBubble(role, text) {
         const div = document.createElement("div");
         div.className = "chat-bubble " + role;
-        div.textContent = text;
+        div.innerHTML = text
+            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em>$1</em>');
+            
         messagesEl.appendChild(div);
         messagesEl.scrollTop = messagesEl.scrollHeight;
         return div;
@@ -1287,10 +1291,126 @@ function loadConditionAlerts() {
                             <div class="log-meta">${a.timestamp}</div>
                         </div>
                     </div>
+                    <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
                     <span class="severity-tag ${a.condition_label.toLowerCase()}">${a.total_violations} violation(s)</span>
+                            <!-- Tombol baru di bawah ini -->
+                            <button class="btn-action" onclick="submitForReview('${a.motor_id}')">Submit for Review</button>
+                    </div>                
                 `;
                 container.appendChild(row);
             });
         })
         .catch(err => console.error('Error loading condition alerts:', err));
+}
+
+function submitForReview(deviceId) {
+    fetch(`/api/expert-review/submit?device=${encodeURIComponent(deviceId)}`, { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                showModal({ type: 'warning', title: 'Cannot Submit', message: data.error, buttonText: 'OK' });
+            } else {
+                showModal({ type: 'success', title: 'Submitted', message: `${deviceId} added to expert review queue.`, buttonText: 'OK' });
+            }
+        })
+        .catch(err => console.error('Error submitting review:', err));
+}
+
+function loadReviewQueue() {
+    fetch('/api/expert-review/list?status=pending')
+        .then(r => r.json())
+        .then(data => {
+            const container = document.getElementById('review-queue-list');
+            container.innerHTML = '';
+
+            if (data.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-muted); font-size: 12px; padding: 12px 0;">No pending reviews.</p>';
+                return;
+            }
+
+            data.forEach(item => {
+                const row = document.createElement('div');
+                row.className = 'log-row';
+                row.innerHTML = `
+                    <div class="log-info">
+                        <div class="icon-box warning"><i class="fa-solid fa-clipboard-question"></i></div>
+                        <div>
+                            <h4>${item.motor_id} — ${item.threshold_alert.condition_label}</h4>
+                            <p>${item.threshold_alert.total_violations} violation(s) detected</p>
+                            <div class="log-meta">${item.created_at}</div>
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        <select id="label-${item.review_id}" class="filter-select">
+                            <option value="Normal">Normal</option>
+                            <option value="Warning">Warning</option>
+                            <option value="Critical" selected>Critical</option>
+                            <option value="Failure">Failure</option>
+                        </select>
+                        <select id="fault-${item.review_id}" class="filter-select">
+                            <option value="Normal">Normal</option>
+                            <option value="Rotor Bar">Rotor Bar</option>
+                            <option value="Bearing Wear">Bearing Wear</option>
+                            <option value="Misalignment">Misalignment</option>
+                            <option value="Stator Winding">Stator Winding</option>
+                        </select>
+                        <button class="btn-action" onclick="approveReview('${item.review_id}')">Approve</button>
+                        <button class="btn-outline" onclick="rejectReview('${item.review_id}')">Reject</button>
+                    </div>
+                `;
+                container.appendChild(row);
+            });
+        })
+        .catch(err => console.error('Error loading review queue:', err));
+}
+
+function approveReview(reviewId) {
+    const label = document.getElementById(`label-${reviewId}`).value;
+    const fault = document.getElementById(`fault-${reviewId}`).value;
+
+    fetch('/api/expert-review/approve', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ review_id: reviewId, expert_label: label, expert_fault_type: fault })
+    })
+    .then(r => r.json())
+    .then(() => {
+        showModal({ type: 'success', title: 'Approved', message: 'Label saved to training dataset.', buttonText: 'OK' });
+        loadReviewQueue();
+    })
+    .catch(err => console.error('Error approving review:', err));
+}
+
+function rejectReview(reviewId) {
+    fetch('/api/expert-review/reject', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ review_id: reviewId })
+    })
+    .then(r => r.json())
+    .then(() => {
+        showModal({ type: 'info', title: 'Rejected', message: 'Review discarded, not added to training data.', buttonText: 'OK' });
+        loadReviewQueue();
+    })
+    .catch(err => console.error('Error rejecting review:', err));
+}
+
+function triggerRetrain() {
+    const resultBox = document.getElementById('retrain-result');
+    resultBox.innerText = 'Retraining in progress, this may take a minute...';
+
+    fetch('/api/admin/retrain', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            const status = data.deployed ? 'DEPLOYED' : 'NOT deployed (failed quality gate)';
+            resultBox.innerHTML = `
+                <strong>Version v${data.version}: ${status}</strong><br>
+                Condition F1 macro: ${data.metrics.condition.f1_macro}<br>
+                Fault-type F1 macro: ${data.metrics.fault_type.f1_macro}<br>
+                ${data.gate_failure_reasons.length ? 'Reasons: ' + data.gate_failure_reasons.join(', ') : ''}
+            `;
+        })
+        .catch(err => {
+            resultBox.innerText = 'Retrain failed: ' + err;
+        });
 }
