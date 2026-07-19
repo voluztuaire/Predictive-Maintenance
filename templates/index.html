@@ -9,8 +9,8 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-
-    <div class="layout-container">
+    <div class="dashboard-bg"></div>
+        <div class="layout-container" style="position: relative; z-index: 1;">
 
     <aside class="sidebar glass-card">
         <div class="logo-container">
@@ -89,10 +89,22 @@
         </div>
     </aside>
 
+        <!-- Mobile Overlay -->
+        <div class="mobile-overlay" id="mobile-overlay" onclick="toggleMobileMenu()"></div>
+
         <main class="main-content">
             <header class="top-bar">
+                <div style="display:flex; align-items:center;">
+                    <button class="mobile-menu-btn" id="mobile-menu-btn" onclick="toggleMobileMenu()">
+                        <i class="fa-solid fa-bars"></i>
+                    </button>
+                </div>
 
                 <div class="top-bar-right">
+                    <button class="theme-toggle-btn" id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Light/Dark Mode">
+                        <i class="fa-solid fa-sun" id="theme-icon"></i>
+                    </button>
+
                     <div class="device-select-wrap">
                         <i class="fa-solid fa-server"></i>
                         <select id="device-select" onchange="selectDevice(this.value)"></select>

@@ -48,6 +48,33 @@ def login():
 
     return render_template("login.html")
 
+@auth_bp.route("/forgot-password", methods=["GET", "POST"])
+def forgot_password():
+    if request.method == "POST":
+        username = request.form.get("username", "").strip()
+        new_password = request.form.get("new_password", "")
+        confirm_password = request.form.get("confirm_password", "")
+
+        if not username or not new_password or not confirm_password:
+            flash("All fields are required.")
+            return redirect(url_for("auth.forgot_password"))
+
+        if new_password != confirm_password:
+            flash("Passwords do not match.")
+            return redirect(url_for("auth.forgot_password"))
+
+        user = User.query.filter_by(username=username).first()
+        if user:
+            user.set_password(new_password)
+            db.session.commit()
+            flash("Password reset successful. Please log in.")
+            return redirect(url_for("auth.login"))
+        else:
+            flash("Username not found.")
+            return redirect(url_for("auth.forgot_password"))
+
+    return render_template("forgot_password.html")
+
 @auth_bp.route("/logout")
 @login_required
 def logout():

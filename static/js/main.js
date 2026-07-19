@@ -7,6 +7,7 @@ let expandedParam = null;
 let fullSparkCharts = {};
 
 document.addEventListener("DOMContentLoaded", () => {
+    initTheme();
     initChart();
     loadDevices();
     fetchAndRenderAlerts();
@@ -15,6 +16,82 @@ document.addEventListener("DOMContentLoaded", () => {
     loadLogs();
     loadThresholds();
 });
+
+/* THEME & MOBILE MENU */
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme === 'light') {
+        document.body.classList.add('light-mode');
+        const icon = document.getElementById('theme-icon');
+        if(icon) icon.classList.replace('fa-sun', 'fa-moon');
+    }
+}
+
+function toggleTheme() {
+    const body = document.body;
+    const icon = document.getElementById('theme-icon');
+    body.classList.toggle('light-mode');
+    if (body.classList.contains('light-mode')) {
+        localStorage.setItem('theme', 'light');
+        if(icon) icon.classList.replace('fa-sun', 'fa-moon');
+    } else {
+        localStorage.setItem('theme', 'dark');
+        if(icon) icon.classList.replace('fa-moon', 'fa-sun');
+    }
+    updateChartsTheme();
+}
+
+function toggleMobileMenu() {
+    const sidebar = document.querySelector('.sidebar');
+    const overlay = document.getElementById('mobile-overlay');
+    if (sidebar && overlay) {
+        sidebar.classList.toggle('open');
+        overlay.classList.toggle('open');
+    }
+}
+
+function updateChartsTheme() {
+    const isLight = document.body.classList.contains('light-mode');
+    const gridColor = getChartColors().gridColor;
+    const textColor = getChartColors().textColor;
+
+    if (sensorChartInstance) {
+        if(sensorChartInstance.options.plugins && sensorChartInstance.options.plugins.legend) {
+            sensorChartInstance.options.plugins.legend.labels.color = textColor;
+        }
+        if(sensorChartInstance.options.scales.yTemp) {
+            sensorChartInstance.options.scales.yTemp.grid.color = gridColor;
+        }
+        if(sensorChartInstance.options.scales.x) {
+            sensorChartInstance.options.scales.x.grid.color = gridColor;
+            sensorChartInstance.options.scales.x.ticks.color = textColor;
+        }
+        sensorChartInstance.update();
+    }
+    if (sensorChartFullInstance) {
+        if(sensorChartFullInstance.options.plugins && sensorChartFullInstance.options.plugins.legend) {
+            sensorChartFullInstance.options.plugins.legend.labels.color = textColor;
+        }
+        if(sensorChartFullInstance.options.scales.y) {
+            sensorChartFullInstance.options.scales.y.grid.color = gridColor;
+            sensorChartFullInstance.options.scales.y.ticks.color = textColor;
+        }
+        if(sensorChartFullInstance.options.scales.x) {
+            sensorChartFullInstance.options.scales.x.grid.color = gridColor;
+            sensorChartFullInstance.options.scales.x.ticks.color = textColor;
+        }
+        sensorChartFullInstance.update();
+    }
+}
+
+
+function getChartColors() {
+    const isLight = document.body.classList.contains('light-mode');
+    return {
+        gridColor: isLight ? '#e2e8f0' : '#1a1a1a',
+        textColor: isLight ? '#64748b' : '#9ca3af'
+    };
+}
 
 /* CUSTOM MODAL */
 function showModal(options) {
@@ -103,13 +180,14 @@ document.addEventListener('keydown', function(e) {
 });
 
 function chartOptions() {
+    const colors = getChartColors();
     return {
         responsive: true,
         maintainAspectRatio: false,
-        plugins: { legend: { labels: { color: '#9ca3af', boxWidth: 12, padding: 16 } } },
+        plugins: { legend: { labels: { color: colors.textColor, boxWidth: 12, padding: 16 } } },
         scales: {
-            y: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' }, beginAtZero: false },
-            x: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' } }
+            y: { grid: { color: colors.gridColor }, ticks: { color: colors.textColor }, beginAtZero: false },
+            x: { grid: { color: colors.gridColor }, ticks: { color: colors.textColor } }
         }
     };
 }
@@ -135,13 +213,13 @@ function initChart() {
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: '#9ca3af', boxWidth: 12, padding: 16 } } },
+                    plugins: { legend: { labels: { color: getChartColors().textColor, boxWidth: 12, padding: 16 } } },
                     scales: {
-                        yTemp: { position: 'left', grid: { color: '#262626' }, ticks: { color: '#f97316' }, title: { display: true, text: 'Temp (C)', color: '#f97316' } },
+                        yTemp: { position: 'left', grid: { color: getChartColors().gridColor }, ticks: { color: '#f97316' }, title: { display: true, text: 'Temp (C)', color: '#f97316' } },
                         yVib: { position: 'left', display: false, min: 0, max: 10 },
                         yVolt: { position: 'right', grid: { display: false }, ticks: { color: '#38bdf8' }, title: { display: true, text: 'Voltage (V)', color: '#38bdf8' }, min: 380, max: 410 },
                         yCurr: { position: 'right', display: false, min: 0, max: 12 },
-                        x: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' } }
+                        x: { grid: { color: getChartColors().gridColor }, ticks: { color: getChartColors().textColor } }
                     }
                 }
             });
@@ -171,11 +249,11 @@ function initFullChart() {
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: '#9ca3af' } } },
+                    plugins: { legend: { labels: { color: getChartColors().textColor } } },
                     scales: {
-                        y: { position: 'left', ticks: { color: '#9ca3af' }, grid: { color: '#262626' } },
+                        y: { position: 'left', ticks: { color: getChartColors().textColor }, grid: { color: getChartColors().gridColor } },
                         y1: { position: 'right', ticks: { color: '#38bdf8' }, grid: { display: false } },
-                        x: { ticks: { color: '#9ca3af' }, grid: { color: '#262626' } }
+                        x: { ticks: { color: getChartColors().textColor }, grid: { color: getChartColors().gridColor } }
                     }
                 }
             });
@@ -244,8 +322,8 @@ function renderFullSpark(paramKey) {
                     maintainAspectRatio: false,
                     plugins: { legend: { display: false } },
                     scales: {
-                        x: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' } },
-                        y: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' }, beginAtZero: false }
+                        x: { grid: { color: getChartColors().gridColor }, ticks: { color: getChartColors().textColor } },
+                        y: { grid: { color: getChartColors().gridColor }, ticks: { color: getChartColors().textColor }, beginAtZero: false }
                     }
                 }
             });
@@ -936,11 +1014,11 @@ function initForecastChart() {
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: '#9ca3af' } } },
+                    plugins: { legend: { labels: { color: getChartColors().textColor } } },
                     scales: {
-                        y: { position: 'left', min:0, max:100, ticks: { color: '#22c55e' }, grid: { color: '#262626' } },
+                        y: { position: 'left', min:0, max:100, ticks: { color: '#22c55e' }, grid: { color: getChartColors().gridColor } },
                         y1: { position: 'right', ticks: { color: '#f97316' }, grid: { display: false } },
-                        x: { ticks: { color: '#9ca3af' }, grid: { color: '#262626' } }
+                        x: { ticks: { color: getChartColors().textColor }, grid: { color: getChartColors().gridColor } }
                     }
                 }
             });
@@ -1005,7 +1083,7 @@ function renderSensorForecastGrid(sensors) {
                     labels: series.map((_, i) => i),
                     datasets: [{
                         data: series,
-                        borderColor: trendUp ? '#ef4444' : '#9ca3af',
+                        borderColor: trendUp ? '#ef4444' : getChartColors().textColor,
                         borderWidth: 2,
                         pointRadius: 0,
                         tension: 0.3,
@@ -1252,8 +1330,8 @@ function renderComboChart(canvasId, histLabels, histData, fcstLabels, fcstData, 
                 tooltip: { mode: 'index', intersect: false }
             },
             scales: {
-                x: { grid: { color: '#262626' }, ticks: { color: '#9ca3af', maxTicksLimit: 8 } },
-                y: { grid: { color: '#262626' }, ticks: { color: '#9ca3af' } }
+                x: { grid: { color: getChartColors().gridColor }, ticks: { color: getChartColors().textColor, maxTicksLimit: 8 } },
+                y: { grid: { color: getChartColors().gridColor }, ticks: { color: getChartColors().textColor } }
             }
         },
         // Masukkan plugin custom-nya ke sini
@@ -1336,7 +1414,11 @@ function loadReviewQueue() {
                         <div class="icon-box warning"><i class="fa-solid fa-clipboard-question"></i></div>
                         <div>
                             <h4>${item.motor_id} — ${item.threshold_alert.condition_label}</h4>
-                            <p>${item.threshold_alert.total_violations} violation(s) detected</p>
+                            <div class="viol-list-wrapper">
+                                ${item.threshold_alert.violations.map(v =>
+                                    `<span class="severity-tag ${v.tier}">${v.parameter}: ${v.actual_value} (thr ${v.threshold})</span>`
+                                ).join('')}
+                            </div>
                             <div class="log-meta">${item.created_at}</div>
                         </div>
                     </div>
@@ -1397,20 +1479,52 @@ function rejectReview(reviewId) {
 
 function triggerRetrain() {
     const resultBox = document.getElementById('retrain-result');
-    resultBox.innerText = 'Retraining in progress, this may take a minute...';
+    resultBox.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Retraining in progress, this may take a minute...';
 
     fetch('/api/admin/retrain', { method: 'POST' })
         .then(r => r.json())
         .then(data => {
-            const status = data.deployed ? 'DEPLOYED' : 'NOT deployed (failed quality gate)';
+            const status = data.deployed ? '<span style="color:var(--success);">DEPLOYED</span>' : '<span style="color:var(--danger);">NOT deployed (failed quality gate)</span>';
+            
+            let confHtml = '';
+            if (data.metrics && data.metrics.condition && data.metrics.condition.confusion_matrix) {
+                const labels = ['Normal', 'Warning', 'Critical', 'Failure'];
+                const matrix = data.metrics.condition.confusion_matrix;
+                
+                confHtml += '<div class="conf-matrix-wrapper">';
+                confHtml += '<h4 style="margin-bottom:8px; color:var(--text-main);">Condition Confusion Matrix (Actual \ Predicted)</h4>';
+                confHtml += '<table class="conf-matrix-table">';
+                confHtml += '<thead><tr><th></th>';
+                labels.forEach(l => confHtml += `<th>${l}</th>`);
+                confHtml += '</tr></thead><tbody>';
+                
+                for(let i=0; i<matrix.length; i++) {
+                    confHtml += `<tr><th>${labels[i]}</th>`;
+                    for(let j=0; j<matrix[i].length; j++) {
+                        const val = matrix[i][j];
+                        let cellClass = 'conf-cell-empty';
+                        if (val > 0) {
+                            if (i === j) cellClass = 'conf-cell-correct';
+                            else cellClass = 'conf-cell-error';
+                        }
+                        confHtml += `<td class="${cellClass}">${val}</td>`;
+                    }
+                    confHtml += '</tr>';
+                }
+                confHtml += '</tbody></table></div>';
+            }
+
             resultBox.innerHTML = `
-                <strong>Version v${data.version}: ${status}</strong><br>
-                Condition F1 macro: ${data.metrics.condition.f1_macro}<br>
-                Fault-type F1 macro: ${data.metrics.fault_type.f1_macro}<br>
-                ${data.gate_failure_reasons.length ? 'Reasons: ' + data.gate_failure_reasons.join(', ') : ''}
+                <div style="margin-bottom: 12px; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px; border: 1px solid var(--border-color);">
+                    <strong>Version v${data.version}: ${status}</strong><br>
+                    Condition F1 macro: ${data.metrics.condition.f1_macro}<br>
+                    Fault-type F1 macro: ${data.metrics.fault_type.f1_macro}<br>
+                    ${data.gate_failure_reasons && data.gate_failure_reasons.length ? '<div style="color:var(--danger); margin-top:8px;">Reasons: ' + data.gate_failure_reasons.join(', ') + '</div>' : ''}
+                </div>
+                ${confHtml}
             `;
         })
         .catch(err => {
-            resultBox.innerText = 'Retrain failed: ' + err;
+            resultBox.innerHTML = '<span style="color:var(--danger);">Retrain failed: ' + err + '</span>';
         });
 }

@@ -619,6 +619,12 @@ def api_threshold_alerts():
 @login_required
 def api_submit_review():
     device_id = request.args.get("device", ALL_MOTOR_IDS[0])
+
+    # Cegah duplicate: kalau motor ini udah ada di antrian pending, jangan submit lagi
+    existing = list_reviews(status="pending", motor_id=device_id)
+    if existing:
+        return jsonify({"error": f"{device_id} is already in the pending review queue."}), 400
+
     row = get_row_for_device(device_id)
     alert = get_threshold_alerts(row)
     if not alert["is_labeling_candidate"]:

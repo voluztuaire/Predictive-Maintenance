@@ -1,1 +1,2 @@
 Timestamp,Motor_ID,Voltage_L1,Voltage_L2,Voltage_L3,Current_L1,Current_L2,Current_L3,Frequency,Power_Factor,Temperature,Vibration_X,Vibration_Y,Vibration_Z,Rotational_Speed,Motor_State,Fault_Type_True,Expert_ID,Reviewed_At,Review_Notes,Source_Review_ID
+2024-02-18 20:00:00,MTR-004,396.76,398.38,397.89,5.64,5.638,5.647,49.96,1.0,43.37,3.27,3.14,2.321,1455.6,Critical,Normal,admin,2026-07-19T05:11:39.944571+00:00,,0008f3aa-4bab-4b7d-840e-ee3e46d9909a
