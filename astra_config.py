@@ -30,7 +30,7 @@ SENSOR_COLS = [
 LABEL_COL     = 'Motor_State'
 LABEL_ORDER   = ['Normal', 'Warning', 'Critical', 'Failure']
 FAULT_COL     = 'Fault_Type_True'
-FAULT_ORDER   = ['Normal', 'Rotor Bar', 'Bearing Wear', 'Misalignment', 'Stator Winding']
+FAULT_ORDER   = ['Normal', 'Rotor Bar', 'Bearing Wear', 'Misalignment', 'Stator Winding', 'Other']
 
 
 # ---- ASTRA-11 Threshold Rules ----

@@ -490,6 +490,30 @@
                     <button class="btn-action" onclick="triggerRetrain()">Retrain Now</button>
                     <div id="retrain-result" style="margin-top:16px;font-size:12px;color:var(--text-muted);"></div>
                 </div>
+
+                <div class="card glass-card" style="margin-top: 24px;">
+                    <div class="card-header">
+                        <h3>Model Retraining History</h3>
+                        <button class="btn-outline" onclick="loadModelHistory()">Refresh</button>
+                    </div>
+                    <div class="table-responsive" style="margin-top:16px; max-height: 400px; overflow-y: auto;">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Version</th>
+                                    <th>Date</th>
+                                    <th>Status</th>
+                                    <th>Condition F1</th>
+                                    <th>Fault F1</th>
+                                    <th>Train Rows</th>
+                                </tr>
+                            </thead>
+                            <tbody id="model-history-list">
+                                <tr><td colspan="6" style="text-align:center; padding:20px; color:var(--text-muted);">Loading history...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
             <!-- SETTINGS (admin only) -->

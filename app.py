@@ -690,6 +690,21 @@ def api_retrain():
     )
     return jsonify(result)
 
+@app.route("/api/admin/models/history")
+@login_required
+def api_models_history():
+    if not current_user.is_admin:
+        return jsonify({"error": "Forbidden: admin access required"}), 403
+    from retrain_pipeline import _load_registry
+    try:
+        reg = _load_registry()
+        # Sort history newest first
+        if "history" in reg:
+            reg["history"] = sorted(reg["history"], key=lambda x: x.get("version", 0), reverse=True)
+        return jsonify(reg)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/alerts")
 @login_required
 def get_alerts():

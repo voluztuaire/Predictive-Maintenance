@@ -82,13 +82,27 @@ function updateChartsTheme() {
         }
         sensorChartFullInstance.update();
     }
+
+    if (typeof forecastCompareCharts !== 'undefined') {
+        Object.values(forecastCompareCharts).forEach(chart => {
+            if (chart.options.scales.x) {
+                chart.options.scales.x.grid.color = gridColor;
+                chart.options.scales.x.ticks.color = textColor;
+            }
+            if (chart.options.scales.y) {
+                chart.options.scales.y.grid.color = gridColor;
+                chart.options.scales.y.ticks.color = textColor;
+            }
+            chart.update();
+        });
+    }
 }
 
 
 function getChartColors() {
     const isLight = document.body.classList.contains('light-mode');
     return {
-        gridColor: isLight ? '#e2e8f0' : '#1a1a1a',
+        gridColor: isLight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(255, 255, 255, 0.08)',
         textColor: isLight ? '#64748b' : '#9ca3af'
     };
 }
@@ -674,7 +688,7 @@ function switchTab(tabName, navEl) {
 
     if (tabName === 'forecast') { loadForecastComparePage(); }
     if (tabName === 'condition') { loadConditionAlerts(); }
-    if (tabName === 'training') { loadReviewQueue(); }
+    if (tabName === 'training') { loadReviewQueue(); loadModelHistory(); }
 }
 
 function selectDevice(deviceId) {
@@ -1422,22 +1436,28 @@ function loadReviewQueue() {
                             <div class="log-meta">${item.created_at}</div>
                         </div>
                     </div>
-                    <div style="display:flex; gap:8px;">
-                        <select id="label-${item.review_id}" class="filter-select">
-                            <option value="Normal">Normal</option>
-                            <option value="Warning">Warning</option>
-                            <option value="Critical" selected>Critical</option>
-                            <option value="Failure">Failure</option>
-                        </select>
-                        <select id="fault-${item.review_id}" class="filter-select">
-                            <option value="Normal">Normal</option>
-                            <option value="Rotor Bar">Rotor Bar</option>
-                            <option value="Bearing Wear">Bearing Wear</option>
-                            <option value="Misalignment">Misalignment</option>
-                            <option value="Stator Winding">Stator Winding</option>
-                        </select>
-                        <button class="btn-action" onclick="approveReview('${item.review_id}')">Approve</button>
-                        <button class="btn-outline" onclick="rejectReview('${item.review_id}')">Reject</button>
+                    <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end; flex-shrink:0; min-width:320px; max-width:450px;">
+                        <div style="display:flex; gap:8px; width:100%; justify-content:flex-end;">
+                            <select id="label-${item.review_id}" class="filter-select" style="flex:1;">
+                                <option value="Normal">Normal</option>
+                                <option value="Warning">Warning</option>
+                                <option value="Critical" selected>Critical</option>
+                                <option value="Failure">Failure</option>
+                            </select>
+                            <select id="fault-${item.review_id}" class="filter-select" style="flex:1;">
+                                <option value="Normal">Normal</option>
+                                <option value="Rotor Bar">Rotor Bar</option>
+                                <option value="Bearing Wear">Bearing Wear</option>
+                                <option value="Misalignment">Misalignment</option>
+                                <option value="Stator Winding">Stator Winding</option>
+                                <option value="Other">Other / Unrecognized</option>
+                            </select>
+                        </div>
+                        <input type="text" id="notes-${item.review_id}" placeholder="Specify anomaly details (Optional)" class="setting-input" style="width: 100%; padding: 6px 12px; height: 32px; font-size: 13px; box-sizing: border-box;">
+                        <div style="display:flex; gap:8px; justify-content:flex-end; width:100%;">
+                            <button class="btn-action" onclick="approveReview('${item.review_id}')">Approve</button>
+                            <button class="btn-outline" onclick="rejectReview('${item.review_id}')">Reject</button>
+                        </div>
                     </div>
                 `;
                 container.appendChild(row);
@@ -1449,11 +1469,13 @@ function loadReviewQueue() {
 function approveReview(reviewId) {
     const label = document.getElementById(`label-${reviewId}`).value;
     const fault = document.getElementById(`fault-${reviewId}`).value;
+    const notesInput = document.getElementById(`notes-${reviewId}`);
+    const notes = notesInput ? notesInput.value : '';
 
     fetch('/api/expert-review/approve', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ review_id: reviewId, expert_label: label, expert_fault_type: fault })
+        body: JSON.stringify({ review_id: reviewId, expert_label: label, expert_fault_type: fault, notes: notes })
     })
     .then(r => r.json())
     .then(() => {
@@ -1523,8 +1545,64 @@ function triggerRetrain() {
                 </div>
                 ${confHtml}
             `;
+            loadModelHistory();
         })
         .catch(err => {
             resultBox.innerHTML = '<span style="color:var(--danger);">Retrain failed: ' + err + '</span>';
+        });
+}
+
+function loadModelHistory() {
+    fetch('/api/admin/models/history')
+        .then(r => r.json())
+        .then(data => {
+            const list = document.getElementById('model-history-list');
+            if (!list) return;
+            
+            if (data.error) {
+                list.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--danger);">${data.error}</td></tr>`;
+                return;
+            }
+
+            if (!data.history || data.history.length === 0) {
+                list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:var(--text-muted);">No training history found.</td></tr>';
+                return;
+            }
+
+            let html = '';
+            data.history.forEach(h => {
+                let statusBadge = '';
+                if (h.passed_gate) {
+                    if (data.deployed_version === h.version) {
+                        statusBadge = '<span class="severity-tag" style="background:var(--success);color:#fff">Deployed</span>';
+                    } else {
+                        statusBadge = '<span class="severity-tag info">Passed</span>';
+                    }
+                } else {
+                    statusBadge = '<span class="severity-tag failure">Failed Gate</span>';
+                }
+
+                const condF1 = h.metrics && h.metrics.condition ? h.metrics.condition.f1_macro.toFixed(3) : '-';
+                const faultF1 = h.metrics && h.metrics.fault_type ? h.metrics.fault_type.f1_macro.toFixed(3) : '-';
+                const rows = h.metrics && h.metrics.training_rows ? h.metrics.training_rows : '-';
+                const dateText = h.created_at ? new Date(h.created_at).toLocaleString() : '-';
+
+                html += `
+                    <tr>
+                        <td><strong>v${h.version}</strong></td>
+                        <td>${dateText}</td>
+                        <td>${statusBadge}</td>
+                        <td>${condF1}</td>
+                        <td>${faultF1}</td>
+                        <td>${rows}</td>
+                    </tr>
+                `;
+            });
+            list.innerHTML = html;
+        })
+        .catch(err => {
+            console.error('Error loading model history:', err);
+            const list = document.getElementById('model-history-list');
+            if (list) list.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--danger);">Failed to load history</td></tr>';
         });
 }
