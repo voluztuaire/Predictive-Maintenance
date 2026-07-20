@@ -579,22 +579,24 @@ def get_status():
         "device": str(row["motor_id"])
     })
 
-
 @app.route("/api/history")
 @login_required
 def get_history():
     device_id = request.args.get("device", ALL_MOTOR_IDS[0])
     points = int(request.args.get("points", 20))
 
-    motor_df = df[df["motor_id"] == device_id].sort_values("timestamp").tail(points)
+    motor_df = df[df["motor_id"] == device_id].sort_values("timestamp").reset_index(drop=True)
+    idx = motor_row_index.get(device_id, 0) % len(motor_df)
+    start = max(0, idx - points + 1)
+    window_df = motor_df.iloc[start:idx + 1]
 
     return jsonify({
-        "labels": motor_df["timestamp"].dt.strftime("%H:%M").tolist(),
-        "temperature": motor_df["Temperature"].round(1).tolist(),
-        "vibration": [get_vibration_rms(row) for _, row in motor_df.iterrows()],
-        "voltage": [get_avg_voltage(row) for _, row in motor_df.iterrows()],
-        "current": [get_avg_current(row) for _, row in motor_df.iterrows()],
-        "rpm": motor_df["Rotational_Speed"].round(1).tolist()
+        "labels": window_df["timestamp"].dt.strftime("%H:%M").tolist(),
+        "temperature": window_df["Temperature"].round(1).tolist(),
+        "vibration": [get_vibration_rms(row) for _, row in window_df.iterrows()],
+        "voltage": [get_avg_voltage(row) for _, row in window_df.iterrows()],
+        "current": [get_avg_current(row) for _, row in window_df.iterrows()],
+        "rpm": window_df["Rotational_Speed"].round(1).tolist()
     })
 
 @app.route("/api/threshold-alerts")
@@ -890,8 +892,10 @@ def get_forecast():
     device_id = request.args.get("device", ALL_MOTOR_IDS[0])
     horizon = float(request.args.get("horizon", 48))
 
-    motor_df = df[df["motor_id"] == device_id].sort_values("timestamp")
-    history_df = motor_df.rename(columns={"timestamp": "Timestamp"}).tail(200)
+    motor_df = df[df["motor_id"] == device_id].sort_values("timestamp").reset_index(drop=True)
+    idx = motor_row_index.get(device_id, 0) % len(motor_df)
+    start = max(0, idx - 199)
+    history_df = motor_df.iloc[start:idx + 1].rename(columns={"timestamp": "Timestamp"})
 
     result = forecast_health_and_rul(
         history_df, horizon,
@@ -914,6 +918,9 @@ def get_forecast():
             "Voltage_L1": result["Voltage_L1"].round(1).tolist(),
             "Voltage_L2": result["Voltage_L2"].round(1).tolist(),
             "Voltage_L3": result["Voltage_L3"].round(1).tolist(),
+            "Current_L1": result["Current_L1"].round(2).tolist(),
+            "Current_L2": result["Current_L2"].round(2).tolist(),
+            "Current_L3": result["Current_L3"].round(2).tolist(),
             "Frequency": result["Frequency"].round(2).tolist(),
             "Power_Factor": result["Power_Factor"].round(2).tolist(),
             "Rotational_Speed": result["Rotational_Speed"].round(1).tolist(),

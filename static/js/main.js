@@ -1205,6 +1205,14 @@ function combineVoltageAvg(sensors) {
     });
 }
 
+function combineCurrentAvg(sensors) {
+    return sensors.Current_L1.map((c1, i) => {
+        const c2 = sensors.Current_L2[i];
+        const c3 = sensors.Current_L3[i];
+        return (c1 + c2 + c3) / 3;
+    });
+}
+
 function loadForecastComparePage() {
     const grid = document.getElementById('forecast-compare-grid');
     
@@ -1226,11 +1234,13 @@ function loadForecastComparePage() {
 
             const fcstVibration = combineVibrationRMS(fcst.sensors);
             const fcstVoltage = combineVoltageAvg(fcst.sensors);
+            const fcstCurrent = combineCurrentAvg(fcst.sensors);   // baru
 
             const params = [
                 { key: 'temperature', label: 'Temperature (°C)', color: '#f97316', histData: hist.temperature, fcstData: fcst.sensors.Temperature },
                 { key: 'vibration', label: 'Vibration (mm/s)', color: '#a855f7', histData: hist.vibration, fcstData: fcstVibration },
                 { key: 'voltage', label: 'Voltage (V)', color: '#38bdf8', histData: hist.voltage, fcstData: fcstVoltage },
+                { key: 'current', label: 'Current (A)', color: '#eab308', histData: hist.current, fcstData: fcstCurrent }, // baru
                 { key: 'rpm', label: 'Rotational Speed (RPM)', color: '#22c55e', histData: hist.rpm, fcstData: fcst.sensors.Rotational_Speed },
             ];
 
@@ -1277,26 +1287,26 @@ function renderComboChart(canvasId, histLabels, histData, fcstLabels, fcstData, 
         afterDraw(chart) {
             const { ctx, chartArea: { top, bottom }, scales: { x } } = chart;
             const xPos = x.getPixelForValue(currentIndex);
+            const isLight = document.body.classList.contains('light-mode');
+            const lineColor = isLight ? 'rgba(0, 0, 0, 0.35)' : 'rgba(255, 255, 255, 0.4)';
+            const textColor = isLight ? 'rgba(0, 0, 0, 0.55)' : 'rgba(255, 255, 255, 0.6)';
 
             ctx.save();
-            
-            // 1. Gambar Garis Vertikal Putus-putus
+
             ctx.beginPath();
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; // Warna garis putih transparan
+            ctx.strokeStyle = lineColor;
             ctx.lineWidth = 2;
-            ctx.setLineDash([4, 4]); // Format putus-putus
+            ctx.setLineDash([4, 4]);
             ctx.moveTo(xPos, top);
             ctx.lineTo(xPos, bottom);
             ctx.stroke();
 
-            // 2. Gambar Titik (Dot) Penanda di bagian atas garis
-            ctx.fillStyle = '#f97316'; // Warna dot orange
+            ctx.fillStyle = '#f97316';
             ctx.beginPath();
             ctx.arc(xPos, top, 4, 0, 2 * Math.PI);
             ctx.fill();
-            
-            // 3. Tambahkan teks "CURRENT" kecil di atas
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+
+            ctx.fillStyle = textColor;
             ctx.font = '10px Inter';
             ctx.textAlign = 'center';
             ctx.fillText('CURRENT', xPos, top - 6);
