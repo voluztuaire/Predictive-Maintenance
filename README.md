@@ -6,13 +6,18 @@ Winteq Predictive Maintenance is a web-based dashboard application built with Fl
 
 ### Key Features
 
-- **Dashboard**: Displays real-time health scores, remaining useful life (RUL), and multi-parameter sensor trend analysis.
+- **Dashboard**: Displays real-time health scores, remaining useful life (RUL), failure probability, and multi-parameter sensor trend analysis.
+- **Forecast**: Projects historical vs forecasted sensor values (temperature, vibration, voltage, current, RPM) 48h ahead per motor.
 - **Motor Assets**: Provides a fleet-wide overview with filtering options and dynamic health progress bars.
-- **Sensor Data**: Tracks live telemetry for temperature, vibration, voltage, and rotational speed per motor.
+- **Sensor Data**: Tracks live telemetry for temperature, vibration, voltage, current, and rotational speed per motor.
 - **AI Alerts**: Logs automated diagnostic insights categorized by severity level, generated from real model predictions.
-- **Reports**: Generates downloadable PDF maintenance reports with customizable filters (motor, fields).
-- **Authentication**: Login/register system with admin and standard user roles.
-- **Settings**: Allows customization of alert thresholds (admin only).
+- **Condition Alerts**: Independent, non-ML threshold-based monitoring that flags sensor readings the AI model may not yet recognize, used to build new training data.
+- **Data Training (admin only)**: Expert Review Queue to approve/reject condition alerts as new labeled training data, plus a Retrain button with gated model deployment and retraining history.
+- **Reports**: Generates downloadable PDF maintenance reports with customizable motor and field selection.
+- **Maintenance Assistant Chatbot**: In-app chat widget backed by a local Ollama LLM, grounded with live fleet/motor data.
+- **Authentication**: Login/register/forgot-password system with admin and standard user roles.
+- **Settings (admin only)**: Customization of alert thresholds and AI model configuration.
+- **Light/Dark mode** and mobile-responsive layout.
 
 ---
 
@@ -23,6 +28,11 @@ Python 3.10+ and:
 pip install -r requirements.txt
 ```
 
+For the chatbot widget, also install [Ollama](https://ollama.com/download) and pull a model:
+```bash
+ollama pull llama3.2:1b
+```
+
 ---
 
 ### Project Structure
@@ -30,27 +40,37 @@ pip install -r requirements.txt
 ```text
 predictive-maintenance/
 │
-├── app.py                              # Flask backend server
-├── auth.py                             # Login/register/logout routes
+├── app.py                              # Flask backend server & API routes
+├── auth.py                             # Login/register/forgot-password/logout routes
 ├── models.py                           # Database models (User, Threshold)
-├── predictive_maintenance_starter.ipynb  # Fault type + RUL model training notebook
-├── astra_anomaly_detection.py          # Condition severity model training script
+├── astra_anomaly_detection.py          # Condition/fault model training script (source of truth)
+├── astra_config.py                     # Shared constants/pure functions (no side effects)
+├── feature_utils.py                    # Shared feature engineering for RUL/Health models
+├── forecast_engine.py                  # Holt-Winters sensor forecasting + RUL/Health projection
+├── expert_validation.py                # Threshold alert -> review queue -> labeled training data
+├── retrain_pipeline.py                 # Versioned retraining with gated deployment
+├── chatbot_llm.py                      # Ollama-based maintenance assistant chatbot
 ├── requirements.txt
 ├── datasets/
 │   ├── client_training_dataset.csv     # Labeled dataset used for training
 │   └── raw_sensor_new_data.csv         # Unlabeled dataset simulating live sensor input
 ├── models/                             # All trained model artifacts live here
 │   ├── fault_classifier_model.pkl
-│   ├── rul_regressor_model.pkl
 │   ├── feature_scaler.pkl
 │   ├── feature_columns.pkl
 │   ├── fault_label_map.pkl
 │   ├── condition_classifier.joblib
-│   └── condition_scaler.joblib
+│   ├── condition_scaler.joblib
+│   ├── condition_scaler_v2_with_current.joblib
+│   ├── rul_iso.joblib
+│   ├── health_iso.joblib
+│   └── registry.json                   # Deployed model version pointer (retrain_pipeline.py)
+├── expert_validation_data/             # Review queue + expert-approved labeled rows
 ├── templates/
 │   ├── index.html
 │   ├── login.html
-│   └── register.html
+│   ├── register.html
+│   └── forgot_password.html
 └── static/
     ├── css/style.css
     └── js/main.js
@@ -65,16 +85,19 @@ predictive-maintenance/
 pip install -r requirements.txt
 ```
 
-2. Generate the model artifacts (only needed once, or after retraining):
-   - Run all cells in `predictive_maintenance_starter.ipynb` to produce: `fault_classifier_model.pkl`, `rul_regressor_model.pkl`, `feature_scaler.pkl`, `feature_columns.pkl`, `fault_label_map.pkl`
-   - Run `astra_anomaly_detection.py` to produce: `condition_classifier.joblib`, `condition_scaler.joblib` (saved to an `outputs/` folder — copy these two files into `models/` afterward)
+2. Make sure the model artifacts described in **Model Setup** below are in `models/`.
 
 3. Start the server:
 ```bash
 python app.py
 ```
 
-4. Open `http://127.0.0.1:5000/`. 
+4. Open `http://127.0.0.1:5000/`.
+
+5. (Optional) Start Ollama to enable the chatbot widget:
+```bash
+ollama serve
+```
 
 ---
 
@@ -92,12 +115,14 @@ The trained model artifacts are **not included** in this repository due to file 
 predictive-maintenance/
 └── models/
     ├── fault_classifier_model.pkl
-    ├── rul_regressor_model.pkl
     ├── feature_scaler.pkl
     ├── feature_columns.pkl
     ├── fault_label_map.pkl
     ├── condition_classifier.joblib
-    └── condition_scaler.joblib
+    ├── condition_scaler.joblib
+    ├── condition_scaler_v2_with_current.joblib
+    ├── rul_iso.joblib
+    └── health_iso.joblib
 ```
 
 3. The application will automatically load these files when you run `app.py`.
@@ -106,12 +131,13 @@ predictive-maintenance/
 
 ### About the Models
 
-This application uses **three independently trained models**, each with its own scaler and feature list:
+This application uses **four independently trained models**, each with its own scaler and feature list:
 
 | Model | Purpose | Output |
 |-------|---------|--------|
 | **Fault Classifier** | Predicts fault type | Fault category label |
-| **RUL Regressor** | Estimates remaining useful life | RUL in hours |
-| **Condition Severity** | Assesses overall health | Health score & severity level |
+| **Condition Classifier** | Assesses severity | Normal / Warning / Critical / Failure |
+| **Health Score Model** | Condition-grounded health | Health score (0-100) |
+| **RUL Model** | Estimates remaining useful life | RUL in hours |
 
-Each model is trained on different feature sets and uses its own dedicated scaler — they are never mixed during inference.
+Each model is trained on different feature sets and uses its own dedicated scaler — they are never mixed during inference. Condition-Based Monitoring Alerts (threshold rules) run independently of all ML models, so newly emerging sensor patterns not yet in training data can still be flagged, reviewed by an expert, and fed back into retraining via `retrain_pipeline.py`.
