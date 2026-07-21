@@ -8,6 +8,8 @@ import numpy as np
 import joblib
 import math
 import os
+os.environ['OMP_NUM_THREADS'] = '1' 
+import lightgbm as lgb 
 import io
 from datetime import datetime
 
@@ -375,7 +377,7 @@ df = sn_add_temporal_features(df)
 
 SN_ALL_FEATURE_COLS = sn_get_feature_columns()
 _sn_X_all = df[SN_ALL_FEATURE_COLS].fillna(0).values
-df["sn_rul_hours"] = sn_rul_model.predict(_sn_X_all)
+df["sn_rul_hours"] = sn_rul_model.predict(_sn_X_all, n_jobs=1)
 df["Temperature_smooth"] = df.groupby("motor_id")["Temperature"].transform(lambda s: s.rolling(20, min_periods=1).mean())
 df["sn_health_score"] = np.clip(sn_health_model.predict(_sn_X_all), 0, 100)
 df["sn_health_score_smooth"] = df.groupby("motor_id")["sn_health_score"].transform(lambda s: s.rolling(5, min_periods=1, center=True).mean())
