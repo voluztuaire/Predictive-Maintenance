@@ -59,18 +59,15 @@ function buildRangeText(rules, thresholdParams, deviceId) {
             parts.push(`${tier[0].toUpperCase() + tier.slice(1)} ${symbol}${r.value}`);
         }
     });
-    return parts.length ? parts.join(' &nbsp;·&nbsp; ') : 'Range: --';
+    return parts.length ? parts.join(' &nbsp;&middot;&nbsp; ') : 'Range: --';
 }
 
 document.addEventListener("DOMContentLoaded", () => {
     initTheme();
-    initChart();
     loadDevices();
-    fetchAndRenderAlerts();
     loadMotors();
     loadSensors();
     loadLogs();
-    loadThresholds();
 });
 
 /* THEME & MOBILE MENU */
@@ -441,6 +438,7 @@ function loadDevices() {
             currentDevice = data.devices[0];
             select.value = currentDevice;
             fetchAndUpdateMetrics();
+            fetchAndRenderAlerts();
         })
         .catch(error => console.error('Error loading devices:', error));
 }
@@ -475,16 +473,32 @@ function fetchAndUpdateMetrics() {
             document.getElementById('val-vib-z').innerText = data.vibration_z + ' mm/s';
 
             const healthNote = document.getElementById('val-health-note');
+            const healthIcon = document.querySelector('.kpi-icon.health');
+            
+            // Clear any inline styles from previous states
+            healthNote.style.color = '';
+            if (healthIcon) {
+                healthIcon.style.color = '';
+                healthIcon.style.background = '';
+            }
+
             if (data.health_score >= 70) {
                 healthNote.innerText = 'Normal operating range';
                 healthNote.className = 'card-delta positive';
             } else if (data.health_score >= 40) {
                 healthNote.innerText = 'Reduced performance detected';
-                healthNote.className = 'card-delta';
+                healthNote.className = 'card-delta text-warning';
+                if (healthIcon) {
+                    healthIcon.style.color = 'var(--warning)';
+                    healthIcon.style.background = 'rgba(245, 158, 11, 0.12)';
+                }
             } else {
                 healthNote.innerText = 'Immediate attention required';
-                healthNote.className = 'card-delta';
-                healthNote.style.color = 'var(--danger)';
+                healthNote.className = 'card-delta text-danger';
+                if (healthIcon) {
+                    healthIcon.style.color = 'var(--danger)';
+                    healthIcon.style.background = 'rgba(239, 68, 68, 0.12)';
+                }
             }
 
             currentDevice = data.device;
@@ -615,7 +629,7 @@ function loadSensors() {
                     <td>${s.current_l1}</td>
                     <td>${s.current_l2}</td>
                     <td>${s.current_l3}</td>
-                    <td>${s.pressure}</td>
+                    <td>${Math.round(s.pressure)}</td>
                     <td><span class="status-pill ${s.status}"><span class="dot"></span>${s.status}</span></td>
                 `;
                 body.appendChild(tr);
@@ -663,106 +677,6 @@ function renderLogsList() {
             <span class="severity-tag ${l.type}">${l.type}</span>
         `;
         container.appendChild(row);
-    });
-}
-
-/* THRESHOLD SETTINGS */
-function loadThresholds() {
-    fetch('/api/settings')
-        .then(r => r.json())
-        .then(data => {
-            document.getElementById('slider-temp').value = data.temperature;
-            document.getElementById('val-temp-threshold').innerText = data.temperature;
-
-            document.getElementById('slider-vib').value = data.vibration;
-            document.getElementById('val-vib-threshold').innerText = data.vibration;
-
-            document.getElementById('slider-current').value = data.current_deviation;
-            document.getElementById('val-current-threshold').innerText = data.current_deviation;
-
-            document.getElementById('slider-pressure').value = data.pressure;
-            document.getElementById('val-pressure-threshold').innerText = data.pressure;
-
-            document.getElementById('slider-voltage-high').value = data.voltage_high;
-            document.getElementById('val-voltage-high-threshold').innerText = data.voltage_high;
-
-            document.getElementById('slider-voltage-low').value = data.voltage_low;
-            document.getElementById('val-voltage-low-threshold').innerText = data.voltage_low;
-
-            document.getElementById('slider-current-high').value = data.current_high;
-            document.getElementById('val-current-high-threshold').innerText = data.current_high;
-        })
-        .catch(error => console.error('Error loading thresholds:', error));
-}
-
-function saveThresholds() {
-    const payload = {
-        temperature: parseFloat(document.getElementById('slider-temp').value),
-        vibration: parseFloat(document.getElementById('slider-vib').value),
-        current_deviation: parseFloat(document.getElementById('slider-current').value),
-        pressure: parseFloat(document.getElementById('slider-pressure').value),
-        voltage_high: parseFloat(document.getElementById('slider-voltage-high').value),
-        voltage_low: parseFloat(document.getElementById('slider-voltage-low').value),
-        current_high: parseFloat(document.getElementById('slider-current-high').value)
-    };
-
-    fetch('/api/settings', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    })
-    .then(r => r.json())
-    .then(data => {
-        showModal({
-            type: 'success',
-            title: 'Settings Saved',
-            message: data.message || 'Threshold values updated successfully.',
-            buttonText: 'OK'
-        });
-        loadThresholds();
-    })
-    .catch(error => {
-        showModal({
-            type: 'error',
-            title: 'Error',
-            message: 'Failed to save settings. Please try again.',
-            buttonText: 'OK'
-        });
-        console.error('Error saving thresholds:', error);
-    });
-}
-
-function resetThresholds() {
-    showModal({
-        type: 'confirm',
-        title: 'Reset Thresholds',
-        message: 'Are you sure you want to reset all thresholds to their default values? This action cannot be undone.',
-        confirmText: 'Reset',
-        cancelText: 'Cancel',
-        onConfirm: function() {
-            fetch('/api/settings/reset', { method: 'POST' })
-                .then(r => r.json())
-                .then(() => {
-                    showModal({
-                        type: 'success',
-                        title: 'Reset Complete',
-                        message: 'Thresholds have been reset to default values.',
-                        buttonText: 'OK'
-                    });
-                    loadThresholds();
-                })
-                .catch(error => {
-                    showModal({
-                        type: 'error',
-                        title: 'Error',
-                        message: 'Failed to reset thresholds. Please try again.',
-                        buttonText: 'OK'
-                    });
-                    console.error('Error resetting thresholds:', error);
-                });
-        },
-        onCancel: function() {
-        }
     });
 }
 
@@ -1165,7 +1079,7 @@ function toggleSensorDetail() {
 }
 
 const SENSOR_LABELS = {
-    Temperature: { name: 'Temperature', unit: '°C' },
+    Temperature: { name: 'Temperature', unit: '&deg;C' },
     Vibration_X: { name: 'Vibration X', unit: 'mm/s' },
     Vibration_Y: { name: 'Vibration Y', unit: 'mm/s' },
     Vibration_Z: { name: 'Vibration Z', unit: 'mm/s' },
@@ -1187,7 +1101,7 @@ function renderSensorForecastGrid(sensors) {
         const last = series[series.length - 1];
         const first = series[0];
         const trendUp = last > first;
-        const arrow = trendUp ? '↗' : (last < first ? '↘' : '');
+        const arrow = trendUp ? '\u2197' : (last < first ? '\u2198' : '');
         const arrowColor = trendUp ? 'var(--danger)' : 'var(--text-muted)';
 
         const canvasId = 'forecast-spark-' + key;

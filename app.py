@@ -225,8 +225,8 @@ def check_violations(row: dict, device_id: str = None) -> dict:
 
     return v
 
-def assign_threshold_label(row: dict) -> str:
-    viol = check_violations(row)
+def assign_threshold_label(row: dict, device_id: str = None) -> str:
+    viol = check_violations(row, device_id=device_id)
     n_f, n_c, n_w = len(viol['failure']), len(viol['critical']), len(viol['warning'])
     n_t = n_f + n_c + n_w
     if n_f >= 1 or n_t >= 4: return 'Failure'
@@ -239,8 +239,8 @@ def get_threshold_alerts(row) -> dict:
     row_dict = row.to_dict()
     motor_id = str(row.get("motor_id", ""))
     viol = check_violations(row_dict, device_id=motor_id)
-    condition = assign_threshold_label(row_dict)
-
+    condition = assign_threshold_label(row_dict, device_id=motor_id)
+    
     detail = []
     for tier in ('warning', 'critical', 'failure'):
         for param in viol[tier]:
@@ -509,7 +509,7 @@ def predict_row(row):
 
     temp = float(row["Temperature"])
     vib = math.sqrt(row["Vibration_X"]**2 + row["Vibration_Y"]**2 + row["Vibration_Z"]**2)
-    rpm_dev = abs(float(row["Rotational_Speed"]) - 1475)
+    rpm_dev = abs(float(row["Rotational_Speed"]) - 1500)
     voltage_imbalance_pct = float(row["Voltage_Imbalance"]) / float(row["Voltage_Mean"]) * 100
 
     def score_from(value, healthy_max, fail_at):
@@ -1086,7 +1086,7 @@ def generate_report():
             "vibration": ("Vibration RMS (mm/s)", str(get_vibration_rms(row))),
             "voltage": ("Voltage Avg (V)", str(get_avg_voltage(row))),
             "current": ("Current Avg (A)", str(get_avg_current(row))),
-            "rpm": ("Rotational Speed (RPM)", str(round(float(row["Rotational_Speed"]), 1))),
+            "rpm": ("Rotational Speed (RPM)", str(round(float(row["Rotational_Speed"])))),
         }
         for f in selected_fields:
             if f in field_map:
@@ -1190,8 +1190,6 @@ with app.app_context():
 # CHATBOT INTEGRATION (Ollama LLM)
 # ============================================================
 llm_sessions = {}
-_chatbot_system_prompt = build_system_prompt()  # built once at startup
-
 
 @app.route("/api/chat/llm", methods=["POST"])
 @login_required
@@ -1202,10 +1200,14 @@ def chat_llm():
     if sid not in llm_sessions:
         llm_sessions[sid] = LLMConversationContext()
 
+    # Rebuild tiap request supaya chatbot selalu tahu kondisi motor TERKINI,
+    # bukan snapshot saat server pertama start.
+    live_system_prompt = build_system_prompt()
+
     result = chatbot_response_llm(
         user_input,
         llm_sessions[sid],
-        _chatbot_system_prompt,
+        live_system_prompt,
         print_streaming=False
     )
     return jsonify(result)

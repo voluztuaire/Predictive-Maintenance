@@ -135,15 +135,15 @@
                         <div class="kpi-icon health"><i class="fa-solid fa-heart-pulse"></i></div>
                         <div class="kpi-body">
                             <div class="card-title">Real-time Health Score</div>
-                            <div class="card-value" id="val-health">88.5%</div>
-                            <div class="card-delta positive" id="val-health-note">Normal operating range</div>
+                            <div class="card-value" id="val-health">--%</div>
+                            <div class="card-delta" id="val-health-note">Loading...</div>
                         </div>
                     </div>
                     <div class="card glass-card kpi-card">
                         <div class="kpi-icon rul"><i class="fa-solid fa-hourglass-half"></i></div>
                         <div class="kpi-body">
                             <div class="card-title">Remaining Useful Life</div>
-                            <div class="card-value" id="val-rul">3,420 <span class="unit">Hrs</span></div>
+                            <div class="card-value" id="val-rul">-- <span class="unit">Hrs</span></div>
                             <div class="card-delta">Estimated before failure</div>
                         </div>
                     </div>
@@ -151,7 +151,7 @@
                         <div class="kpi-icon alarm"><i class="fa-solid fa-shield-halved"></i></div>
                         <div class="kpi-body">
                             <div class="card-title">False Alarm Rate</div>
-                            <div class="card-value" id="val-falsealarm">0.05%</div>
+                            <div class="card-value" id="val-falsealarm">--%</div>
                             <div class="card-delta positive">AI correlation active</div>
                         </div>
                     </div>
@@ -159,8 +159,8 @@
                         <div class="kpi-icon prob"><i class="fa-solid fa-chart-simple"></i></div>
                         <div class="kpi-body">
                             <div class="card-title">Failure Probability</div>
-                            <div class="card-value" id="val-failprob">14%</div>
-                            <div class="card-delta" id="val-failprob-window">Based on current sensor pattern</div>
+                            <div class="card-value" id="val-failprob">--%</div>
+                            <div class="card-delta" id="val-failprob-window">Loading...</div>
                         </div>
                     </div>
                 </div>
@@ -194,7 +194,7 @@
                                     <div class="fill fix"></div>
                                 </div>
                                 <div class="inside-circle">
-                                    <span class="inside-value" id="val-risklevel">14%</span>
+                                    <span class="inside-value" id="val-risklevel">--%</span>
                                     <span class="inside-label">Risk Level</span>
                                 </div>
                             </div>
@@ -214,9 +214,6 @@
                                 <div class="param-label">Temperature</div>
                                 <div class="param-value" id="val-temperature">58.2 <span class="unit">C</span></div>
                             </div>
-                            <div class="param-threshold-hint" style="font-size:10px;color:var(--text-muted);">
-                                Threshold: --
-                            </div>
                             <div class="spark-wrap">
                                 <canvas id="spark-temp"></canvas>
                             </div>
@@ -229,7 +226,7 @@
                             <div class="param-icon vib"><i class="fa-solid fa-wave-square"></i></div>
                             <div class="param-info">
                                 <div class="param-label">Vibration (X/Y/Z)</div>
-                                <div class="param-value" style="font-size:14px; gap:8px;">
+                                <div class="param-value" style="font-size:14px; gap:4px; flex-direction:column; align-items:flex-start;">
                                     <span id="val-vib-x">-- mm/s</span>
                                     <span id="val-vib-y">-- mm/s</span>
                                     <span id="val-vib-z">-- mm/s</span>
@@ -245,7 +242,7 @@
                             <div class="param-icon curr"><i class="fa-solid fa-bolt"></i></div>
                             <div class="param-info">
                                 <div class="param-label">Voltage (L1/L2/L3)</div>
-                                <div class="param-value" style="font-size:14px; gap:8px;">
+                                <div class="param-value" style="font-size:14px; gap:4px; flex-direction:column; align-items:flex-start;">
                                     <span id="val-voltage-l1">-- V</span>
                                     <span id="val-voltage-l2">-- V</span>
                                     <span id="val-voltage-l3">-- V</span>
@@ -261,7 +258,7 @@
                             <div class="param-icon amps"><i class="fa-solid fa-plug-circle-bolt"></i></div>
                             <div class="param-info">
                                 <div class="param-label">Current (L1/L2/L3)</div>
-                                <div class="param-value" style="font-size:14px; gap:8px;">
+                                <div class="param-value" style="font-size:14px; gap:4px; flex-direction:column; align-items:flex-start;">
                                     <span id="val-current-l1">-- A</span>
                                     <span id="val-current-l2">-- A</span>
                                     <span id="val-current-l3">-- A</span>
@@ -420,20 +417,22 @@
                         </select>
                     </div>
 
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Motor</th>
-                                <th>Status</th>
-                                <th>Health Score</th>
-                                <th>RUL (Hrs)</th>
-                                <th>Last Update</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="motors-table-body">
-                        </tbody>
-                    </table>
+                    <div class="table-responsive-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Motor</th>
+                                    <th>Status</th>
+                                    <th>Health Score</th>
+                                    <th>RUL (Hrs)</th>
+                                    <th>Last Update</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="motors-table-body">
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -443,21 +442,23 @@
                     <div class="card-header">
                         <h3>Live Sensor Telemetry</h3>
                     </div>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Motor</th>
-                                <th>Temp (C)</th>
-                                <th>Vib X</th><th>Vib Y</th><th>Vib Z</th>
-                                <th>Volt L1</th><th>Volt L2</th><th>Volt L3</th>
-                                <th>Curr L1</th><th>Curr L2</th><th>Curr L3</th>
-                                <th>RPM</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody id="sensors-table-body">
-                        </tbody>
-                    </table>
+                    <div class="table-responsive-wrap">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>Motor</th>
+                                    <th>Temp (C)</th>
+                                    <th>Vib X</th><th>Vib Y</th><th>Vib Z</th>
+                                    <th>Volt L1</th><th>Volt L2</th><th>Volt L3</th>
+                                    <th>Curr L1</th><th>Curr L2</th><th>Curr L3</th>
+                                    <th>RPM</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sensors-table-body">
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>    
 

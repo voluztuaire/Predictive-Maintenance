@@ -25,26 +25,6 @@
     --shadow: 0 8px 28px 0 rgba(0,0,0,0.35);
 }
 
-body.light-mode {
-    --bg-main: #f4f7f6;
-    --bg-sidebar: #ffffff;
-    --bg-card: #ffffff;
-    --primary-orange: #ea580c;
-    --primary-orange-hover: #c2410c;
-    --text-main: #1e293b;
-    --text-muted: #64748b;
-    --border-color: rgba(0, 0, 0, 0.1);
-    --border-dark: rgba(0, 0, 0, 0.1);
-    --glass-bg: #ffffff;
-    --glass-bg-hover: #f1f5f9;
-    --glass-bg-solid: #ffffff;
-    --glass-bg-active: #e2e8f0;
-    --input-bg: #ffffff;
-    --modal-overlay: rgba(255, 255, 255, 0.7);
-    --shadow: 0 4px 16px rgba(0,0,0,0.05);
-}
-
-
 *{margin:0;padding:0;box-sizing:border-box;font-family:'Inter',sans-serif}
 body{background-color:var(--bg-main);color:var(--text-main);height:100vh;overflow:hidden}
 .layout-container{display:flex;height:100%}
