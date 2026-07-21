@@ -21,7 +21,7 @@ from reportlab.lib.enums import TA_LEFT
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 
-from models import db, User, Threshold, DEFAULT_THRESHOLDS
+from models import db, User, AlarmRule 
 from auth import auth_bp
 from forecast_engine import forecast_health_and_rul
 
@@ -175,44 +175,55 @@ THRESHOLDS = {
     'Current_Imbalance_Pct': {'warning': 0.6, 'critical': 1.8, 'failure': 3.5},
 }
 
+# ============================================================
+# DYNAMIC THRESHOLDS — dibaca dari tabel AlarmRule, bukan hardcode
+# ============================================================
+_rules_cache = None  # None = perlu di-refresh dari DB
 
-def check_violations(row: dict) -> dict:
+def invalidate_rules_cache():
+    global _rules_cache
+    _rules_cache = None
+
+def get_active_rules(device_id: str = None):
+    """
+    Ambil semua AlarmRule yang enabled, cocok untuk device tertentu
+    (rule dengan device='All' berlaku untuk semua motor).
+    Di-cache di memory supaya gak query DB tiap kali check_violations()
+    dipanggil (dipanggil sangat sering: tiap tick, tiap api/status, dst).
+    Cache di-invalidate otomatis tiap kali rule ditambah/diubah/dihapus.
+    """
+    global _rules_cache
+    if _rules_cache is None:
+        _rules_cache = [r.to_dict() for r in AlarmRule.query.filter_by(enabled=True).all()]
+
+    if device_id is None:
+        return _rules_cache
+    return [r for r in _rules_cache if r["device"] == "All" or r["device"] == device_id]
+
+def check_violations(row: dict, device_id: str = None) -> dict:
+    """
+    SEKARANG baca dari AlarmRule (database) via get_active_rules(),
+    bukan dict THRESHOLDS statis. Ganti value di Settings -> langsung
+    ngaruh di sini pada request berikutnya.
+    """
     v = {'warning': [], 'critical': [], 'failure': []}
+    rules = get_active_rules(device_id)
 
-    def upper(feat, key):
-        val = row.get(feat, 0)
-        t = THRESHOLDS[key]
-        if val > t['failure']: v['failure'].append(feat)
-        elif val > t['critical']: v['critical'].append(feat)
-        elif val > t['warning']: v['warning'].append(feat)
+    for r in rules:
+        val = row.get(r["parameter"])
+        if val is None:
+            continue
+        if r["condition"] == "more_than":
+            breached = val > r["value"]
+            label = r["parameter"]
+        else:  # less_than
+            breached = val < r["value"]
+            label = f'{r["parameter"]}(low)'
+        if breached:
+            tier = r["tier"] if r["tier"] in v else "warning"
+            v[tier].append(label)
 
-    def lower(feat, key):
-        val = row.get(feat, 9999)
-        t = THRESHOLDS[key]
-        if val < t['failure']: v['failure'].append(f"{feat}(low)")
-        elif val < t['critical']: v['critical'].append(f"{feat}(low)")
-        elif val < t['warning']: v['warning'].append(f"{feat}(low)")
-
-    upper('Temperature', 'Temperature')
-    upper('Vibration_X', 'Vibration_X')
-    upper('Vibration_Y', 'Vibration_Y')
-    upper('Vibration_Z', 'Vibration_Z')
-    upper('Voltage_L1', 'Voltage_L1_high')
-    upper('Voltage_L2', 'Voltage_L2_high')
-    upper('Voltage_L3', 'Voltage_L3_high')
-    upper('Current_L1', 'Current_L1_high')
-    upper('Current_L2', 'Current_L2_high')
-    upper('Current_L3', 'Current_L3_high')
-    upper('Frequency', 'Frequency_high')
-    upper('Voltage_Imbalance_Pct', 'Voltage_Imbalance_Pct')
-    upper('Current_Imbalance_Pct', 'Current_Imbalance_Pct')
-    lower('Voltage_L1', 'Voltage_L1_low')
-    lower('Voltage_L2', 'Voltage_L2_low')
-    lower('Voltage_L3', 'Voltage_L3_low')
-    lower('Frequency', 'Frequency_low')
-    lower('Rotational_Speed', 'RPM_low')
     return v
-
 
 def assign_threshold_label(row: dict) -> str:
     viol = check_violations(row)
@@ -223,11 +234,11 @@ def assign_threshold_label(row: dict) -> str:
     elif n_w >= 1: return 'Warning'
     else: return 'Normal'
 
-
 def get_threshold_alerts(row) -> dict:
     """row: a pandas Series from df (must have Voltage_Imbalance_Pct / Current_Imbalance_Pct already computed)."""
     row_dict = row.to_dict()
-    viol = check_violations(row_dict)
+    motor_id = str(row.get("motor_id", ""))
+    viol = check_violations(row_dict, device_id=motor_id)
     condition = assign_threshold_label(row_dict)
 
     detail = []
@@ -244,7 +255,11 @@ def get_threshold_alerts(row) -> dict:
                 key = 'RPM_low'
             elif base in ('Current_L1', 'Current_L2', 'Current_L3'):
                 key = f"{base}_high"
-            threshold_val = THRESHOLDS.get(key, {}).get(tier)
+            matching_rule = next(
+                (r for r in get_active_rules(motor_id)
+                 if r["parameter"] == base and r["tier"] == tier), None
+            )
+            threshold_val = matching_rule["value"] if matching_rule else None
             detail.append({
                 'parameter': param,
                 'tier': tier,
@@ -466,7 +481,7 @@ def advance_all_motors():
         motor_row_index[mid] = (motor_row_index.get(mid, 0) + 1) % motor_row_counts[mid]
 
         row = get_row_for_device(mid)
-        prediction = predict_row(row)
+        prediction = predict_row_cached(mid, row)
         check_motor_notification(
             mid,
             prediction["condition_label"],
@@ -492,8 +507,6 @@ def predict_row(row):
     rul_pred = float(row["sn_rul_hours"])
     ml_health = float(np.clip(row["sn_health_score_smooth"], 0, 100))
 
-    threshold = Threshold.query.first()
-
     temp = float(row["Temperature"])
     vib = math.sqrt(row["Vibration_X"]**2 + row["Vibration_Y"]**2 + row["Vibration_Z"]**2)
     rpm_dev = abs(float(row["Rotational_Speed"]) - 1475)
@@ -506,10 +519,10 @@ def predict_row(row):
             return 0.0
         return 100.0 * (fail_at - value) / (fail_at - healthy_max)
 
-    temp_score = score_from(temp, threshold.temperature, threshold.temperature * 1.13)
-    vib_score = score_from(vib, threshold.vibration, threshold.vibration * 2.6)
-    rpm_score = score_from(rpm_dev, threshold.pressure * 5.5, threshold.pressure * 16.4)
-    volt_score = score_from(voltage_imbalance_pct, threshold.current_deviation, threshold.current_deviation * 2)
+    temp_score = score_from(temp, 75.0, 75.0 * 1.13)
+    vib_score = score_from(vib, 3.5, 3.5 * 2.6)
+    rpm_score = score_from(rpm_dev, 5.5 * 5.5, 5.5 * 16.4)
+    volt_score = score_from(voltage_imbalance_pct, 15.0, 15.0 * 2)
 
     rule_health = min(temp_score, vib_score, rpm_score, volt_score)
     health_score = min(ml_health, rule_health)
@@ -517,7 +530,7 @@ def predict_row(row):
 
     fault_info = RECOMMENDATION_TABLE.get(fault_pred, RECOMMENDATION_TABLE["Normal"])
 
-    rul_display = max(0, min(rul_pred, 5000))
+    rul_display = round(max(0, min(rul_pred, 5000)))
     rul_days = rul_pred / 24
     if rul_days <= 30:
         risk_window_label = f"Estimated within {round(rul_days)} days"
@@ -531,10 +544,27 @@ def predict_row(row):
         "recommendation": fault_info["recommended_action"],
         "health_score": round(health_score, 1),
         "failure_probability": failure_probability,
-        "rul_hours": round(rul_display, 1),
+        "rul_hours": rul_display,
         "risk_window_label": risk_window_label
     }
 
+_prediction_cache = {}
+
+def predict_row_cached(motor_id, row):
+    idx = motor_row_index.get(motor_id, 0)
+    cache_key = (motor_id, idx)
+    
+    if cache_key in _prediction_cache:
+        return _prediction_cache[cache_key]
+        
+    result = predict_row(row)
+    _prediction_cache[cache_key] = result
+    
+    if len(_prediction_cache) > 40:
+        oldest_key = next(iter(_prediction_cache))
+        del _prediction_cache[oldest_key]
+        
+    return result
 
 # ============================================================
 # ROUTES
@@ -548,19 +578,71 @@ def index():
         username=current_user.username
     )
 
-
 @app.route("/api/devices")
 @login_required
 def get_devices():
     return jsonify({"devices": ALL_MOTOR_IDS})
 
+@app.route("/api/alarm-rules", methods=["GET"])
+@login_required
+def list_alarm_rules():
+    rules = AlarmRule.query.all()
+    return jsonify([r.to_dict() for r in rules])
+
+@app.route("/api/alarm-rules", methods=["POST"])
+@login_required
+def add_alarm_rule():
+    if not current_user.is_admin:
+        return jsonify({"error": "Forbidden"}), 403
+    payload = request.get_json()
+    rule = AlarmRule(
+        name=payload.get("name", ""),
+        parameter=payload["parameter"],
+        tier=payload.get("tier", "warning"),
+        device=payload.get("device", "All"),
+        message=payload.get("message", ""),
+        value=float(payload.get("value", 0)),
+        condition=payload.get("condition", "more_than"),
+        enabled=payload.get("enabled", True),
+    )
+    db.session.add(rule)
+    db.session.commit()
+    invalidate_rules_cache()
+    return jsonify(rule.to_dict())
+
+@app.route("/api/alarm-rules/<int:rule_id>", methods=["PUT"])
+@login_required
+def update_alarm_rule(rule_id):
+    if not current_user.is_admin:
+        return jsonify({"error": "Forbidden"}), 403
+    rule = AlarmRule.query.get_or_404(rule_id)
+    payload = request.get_json()
+    for field in ["name", "parameter", "tier", "device", "message", "condition", "enabled"]:
+        if field in payload:
+            setattr(rule, field, payload[field])
+    if "value" in payload:
+        rule.value = float(payload["value"])
+    db.session.commit()
+    invalidate_rules_cache()          
+    return jsonify(rule.to_dict())
+
+@app.route("/api/alarm-rules/<int:rule_id>", methods=["DELETE"])
+@login_required
+def delete_alarm_rule(rule_id):
+    if not current_user.is_admin:
+        return jsonify({"error": "Forbidden"}), 403
+    rule = AlarmRule.query.get_or_404(rule_id)
+    db.session.delete(rule)
+    db.session.commit()
+    invalidate_rules_cache()          
+    return jsonify({"status": "deleted"})
 
 @app.route("/api/status")
 @login_required
 def get_status():
     device_id = request.args.get("device", ALL_MOTOR_IDS[0])
     row = get_row_for_device(device_id)
-    prediction = predict_row(row)
+    prediction = predict_row_cached(device_id, row)
 
     return jsonify({
         "health_score": prediction["health_score"],
@@ -575,7 +657,18 @@ def get_status():
         "vibration": get_vibration_rms(row),
         "voltage": get_avg_voltage(row),
         "current": get_avg_current(row),
-        "pressure": float(row["Rotational_Speed"]),
+        "pressure": round(float(row["Rotational_Speed"])),
+        "vibration_x": round(float(row["Vibration_X"]), 2),
+        "vibration_y": round(float(row["Vibration_Y"]), 2),
+        "vibration_z": round(float(row["Vibration_Z"]), 2),
+        "voltage_l1": round(float(row["Voltage_L1"]), 1),
+        "voltage_l2": round(float(row["Voltage_L2"]), 1),
+        "voltage_l3": round(float(row["Voltage_L3"]), 1),
+        "current_l1": round(float(row["Current_L1"]), 2),
+        "current_l2": round(float(row["Current_L2"]), 2),
+        "current_l3": round(float(row["Current_L3"]), 2),
+        "frequency": round(float(row["Frequency"]), 2),
+        "power_factor": round(float(row["Power_Factor"]), 2),
         "device": str(row["motor_id"])
     })
 
@@ -596,7 +689,16 @@ def get_history():
         "vibration": [get_vibration_rms(row) for _, row in window_df.iterrows()],
         "voltage": [get_avg_voltage(row) for _, row in window_df.iterrows()],
         "current": [get_avg_current(row) for _, row in window_df.iterrows()],
-        "rpm": window_df["Rotational_Speed"].round(1).tolist()
+        "rpm": window_df["Rotational_Speed"].round(0).astype(int).tolist(),
+        "vibration_x": window_df["Vibration_X"].round(2).tolist(),
+        "vibration_y": window_df["Vibration_Y"].round(2).tolist(),
+        "vibration_z": window_df["Vibration_Z"].round(2).tolist(),
+        "voltage_l1": window_df["Voltage_L1"].round(1).tolist(),
+        "voltage_l2": window_df["Voltage_L2"].round(1).tolist(),
+        "voltage_l3": window_df["Voltage_L3"].round(1).tolist(),
+        "current_l1": window_df["Current_L1"].round(2).tolist(),
+        "current_l2": window_df["Current_L2"].round(2).tolist(),
+        "current_l3": window_df["Current_L3"].round(2).tolist(),
     })
 
 @app.route("/api/threshold-alerts")
@@ -719,7 +821,7 @@ def get_alerts():
         rows = [get_row_for_device(mid) for mid in ALL_MOTOR_IDS]
 
     for row in rows:
-        prediction = predict_row(row)
+        prediction = predict_row_cached(str(row["motor_id"]), row)
         label = prediction["condition_label"]
         fault = prediction["fault_type"]
         health = prediction["health_score"]
@@ -793,7 +895,7 @@ def get_motors():
     rows = [get_row_for_device(mid) for mid in ALL_MOTOR_IDS]
 
     for row in rows:
-        prediction = predict_row(row)
+        prediction = predict_row_cached(str(row["motor_id"]), row)
         status = STATUS_MAP.get(prediction["condition_label"], "Active")
 
         motors.append({
@@ -825,7 +927,7 @@ def get_sensors():
     rows = [get_row_for_device(mid) for mid in ALL_MOTOR_IDS]
 
     for row in rows:
-        prediction = predict_row(row)
+        prediction = predict_row_cached(str(row["motor_id"]), row)
         status = SENSOR_STATUS_MAP.get(prediction["condition_label"], "Normal")
 
         readings.append({
@@ -837,7 +939,16 @@ def get_sensors():
             "current": get_avg_current(row),
             "pressure": float(row["Rotational_Speed"]),
             "status": status,
-            "fault_type": prediction["fault_type"]
+            "fault_type": prediction["fault_type"],
+            "vibration_x": round(float(row["Vibration_X"]), 2),
+            "vibration_y": round(float(row["Vibration_Y"]), 2),
+            "vibration_z": round(float(row["Vibration_Z"]), 2),
+            "voltage_l1": round(float(row["Voltage_L1"]), 1),
+            "voltage_l2": round(float(row["Voltage_L2"]), 1),
+            "voltage_l3": round(float(row["Voltage_L3"]), 1),
+            "current_l1": round(float(row["Current_L1"]), 2),
+            "current_l2": round(float(row["Current_L2"]), 2),
+            "current_l3": round(float(row["Current_L3"]), 2),
         })
 
     return jsonify(readings)
@@ -850,7 +961,7 @@ def get_logs():
     rows = [get_row_for_device(mid) for mid in ALL_MOTOR_IDS]
 
     for i, row in enumerate(rows):
-        prediction = predict_row(row)
+        prediction = predict_row_cached(str(row["motor_id"]), row)
         label = prediction["condition_label"]
         fault = prediction["fault_type"]
 
@@ -933,49 +1044,6 @@ def tick():
     advance_all_motors()
     return jsonify({"status": "ok"})
 
-
-@app.route("/api/settings", methods=["GET", "POST"])
-@login_required
-def update_settings():
-    threshold = Threshold.query.first()
-
-    if request.method == "GET":
-        return jsonify({
-            "temperature": threshold.temperature,
-            "vibration": threshold.vibration,
-            "current_deviation": threshold.current_deviation,
-            "pressure": threshold.pressure
-        })
-
-    if not current_user.is_admin:
-        return jsonify({"error": "Forbidden: admin access required"}), 403
-
-    payload = request.get_json()
-    threshold.temperature = payload.get("temperature", threshold.temperature)
-    threshold.vibration = payload.get("vibration", threshold.vibration)
-    threshold.current_deviation = payload.get("current_deviation", threshold.current_deviation)
-    threshold.pressure = payload.get("pressure", threshold.pressure)
-    db.session.commit()
-
-    return jsonify({"message": "Settings saved."})
-
-
-@app.route("/api/settings/reset", methods=["POST"])
-@login_required
-def reset_settings():
-    if not current_user.is_admin:
-        return jsonify({"error": "Forbidden: admin access required"}), 403
-
-    threshold = Threshold.query.first()
-    threshold.temperature = DEFAULT_THRESHOLDS["temperature"]
-    threshold.vibration = DEFAULT_THRESHOLDS["vibration"]
-    threshold.current_deviation = DEFAULT_THRESHOLDS["current_deviation"]
-    threshold.pressure = DEFAULT_THRESHOLDS["pressure"]
-    db.session.commit()
-
-    return jsonify(DEFAULT_THRESHOLDS)
-
-
 @app.route("/api/report", methods=["POST"])
 @login_required
 def generate_report():
@@ -1008,7 +1076,7 @@ def generate_report():
 
     for device_id in selected_motors:
         row = get_row_for_device(device_id)
-        prediction = predict_row(row)
+        prediction = predict_row_cached(device_id, row)
 
         elements.append(Paragraph(f"Motor: {device_id}", styles["Heading2"]))
 
@@ -1085,14 +1153,8 @@ def generate_report():
         download_name="winteq_maintenance_report.pdf"
     )
 
-
 with app.app_context():
     db.create_all()
-
-    if not Threshold.query.first():
-        db.session.add(Threshold())
-        db.session.commit()
-        print("Default thresholds created.")
 
     if not User.query.filter_by(role="admin").first():
         admin = User(username="admin", email="admin@local", role="admin")
@@ -1100,6 +1162,29 @@ with app.app_context():
         db.session.add(admin)
         db.session.commit()
         print("Default admin created -> username: admin | password: admin123")
+
+    if not AlarmRule.query.first():
+        default_rules = []
+        for param_key, tiers in THRESHOLDS.items():
+            is_low = param_key.endswith('_low')
+            base_param = param_key.replace('_high', '').replace('_low', '')
+            if base_param == 'RPM':
+                base_param = 'Rotational_Speed'
+            clean_name = base_param.replace('_', ' ') 
+            for tier_name, tier_value in tiers.items():   # warning / critical / failure
+                default_rules.append(AlarmRule(
+                    name=f"{clean_name.title()} {'(Low)' if is_low else ''} - {tier_name.title()}".strip(),
+                    parameter=base_param,
+                    tier=tier_name,
+                    device="All",
+                    message=f"{clean_name} {'below' if is_low else 'above'} {tier_name} range",
+                    value=tier_value,
+                    condition="less_than" if is_low else "more_than",
+                    enabled=True,
+                ))
+        db.session.add_all(default_rules)
+        db.session.commit()
+        print(f"Seeded {len(default_rules)} default alarm rules ({len(THRESHOLDS)} params x 3 tiers) from THRESHOLDS.")
 
 # ============================================================
 # CHATBOT INTEGRATION (Ollama LLM)

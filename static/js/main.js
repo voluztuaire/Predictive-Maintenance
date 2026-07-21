@@ -6,6 +6,62 @@ let currentDevice = null;
 let expandedParam = null;
 let fullSparkCharts = {};
 
+const PARAM_DETAIL_CONFIG = {
+    temp: { title: 'Temperature', fields: [
+        { key: 'temperature', label: 'Temperature', color: '#f97316' }
+    ], thresholdParams: ['Temperature'] },
+    vib: { title: 'Vibration', fields: [
+        { key: 'vibration_x', label: 'X', color: '#a855f7' },
+        { key: 'vibration_y', label: 'Y', color: '#9333ea' },
+        { key: 'vibration_z', label: 'Z', color: '#7e22ce' }
+    ], thresholdParams: ['Vibration_X', 'Vibration_Y', 'Vibration_Z'] },
+    volt: { title: 'Voltage', fields: [
+        { key: 'voltage_l1', label: 'L1', color: '#38bdf8' },
+        { key: 'voltage_l2', label: 'L2', color: '#0ea5e9' },
+        { key: 'voltage_l3', label: 'L3', color: '#0369a1' }
+    ], thresholdParams: ['Voltage_L1', 'Voltage_L2', 'Voltage_L3'] },
+    current: { title: 'Current', fields: [
+        { key: 'current_l1', label: 'L1', color: '#eab308' },
+        { key: 'current_l2', label: 'L2', color: '#ca8a04' },
+        { key: 'current_l3', label: 'L3', color: '#a16207' }
+    ], thresholdParams: ['Current_L1', 'Current_L2', 'Current_L3'] },
+    rpm: { title: 'Rotational Speed', fields: [
+        { key: 'rpm', label: 'RPM', color: '#22c55e' }
+    ], thresholdParams: ['Rotational_Speed'] }
+};
+
+let alarmRulesCache = null;
+async function getAlarmRulesCached() {
+    if (alarmRulesCache) return alarmRulesCache;
+    const res = await fetch('/api/alarm-rules');
+    alarmRulesCache = await res.json();
+    return alarmRulesCache;
+}
+
+function buildRangeText(rules, thresholdParams, deviceId) {
+    const matched = rules.filter(r =>
+        thresholdParams.includes(r.parameter) &&
+        r.enabled &&
+        (r.device === 'All' || r.device === deviceId)
+    );
+    if (matched.length === 0) return 'Range: --';
+
+    const byTier = {};
+    matched.forEach(r => {
+        if (!byTier[r.tier]) byTier[r.tier] = r;
+    });
+
+    const parts = [];
+    ['warning', 'critical', 'failure'].forEach(tier => {
+        if (byTier[tier]) {
+            const r = byTier[tier];
+            const symbol = r.condition === 'more_than' ? '>' : '<';
+            parts.push(`${tier[0].toUpperCase() + tier.slice(1)} ${symbol}${r.value}`);
+        }
+    });
+    return parts.length ? parts.join(' &nbsp;·&nbsp; ') : 'Range: --';
+}
+
 document.addEventListener("DOMContentLoaded", () => {
     initTheme();
     initChart();
@@ -219,9 +275,12 @@ function initChart() {
                     labels: data.labels,
                     datasets: [
                         { label: 'Temperature (C)', data: data.temperature, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', borderWidth: 2, tension: 0.4, fill: true, yAxisID: 'yTemp' },
-                        { label: 'Vibration (mm/s)', data: data.vibration, borderColor: '#a855f7', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yVib' },
-                        { label: 'Voltage (V)', data: data.voltage, borderColor: '#38bdf8', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yVolt' },
-                        { label: 'Current (A)', data: data.current, borderColor: '#eab308', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yCurr' }
+                        { label: 'Voltage L1 (V)', data: data.voltage_l1, borderColor: '#38bdf8', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yVolt' },
+                        { label: 'Voltage L2 (V)', data: data.voltage_l2, borderColor: '#0ea5e9', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yVolt' },
+                        { label: 'Voltage L3 (V)', data: data.voltage_l3, borderColor: '#0369a1', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yVolt' },
+                        { label: 'Current L1 (A)', data: data.current_l1, borderColor: '#eab308', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yCurr' },
+                        { label: 'Current L2 (A)', data: data.current_l2, borderColor: '#ca8a04', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yCurr' },
+                        { label: 'Current L3 (A)', data: data.current_l3, borderColor: '#a16207', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yCurr' }
                     ]
                 },
                 options: {
@@ -230,7 +289,6 @@ function initChart() {
                     plugins: { legend: { labels: { color: getChartColors().textColor, boxWidth: 12, padding: 16 } } },
                     scales: {
                         yTemp: { position: 'left', grid: { color: getChartColors().gridColor }, ticks: { color: '#f97316' }, title: { display: true, text: 'Temp (C)', color: '#f97316' } },
-                        yVib: { position: 'left', display: false, min: 0, max: 10 },
                         yVolt: { position: 'right', grid: { display: false }, ticks: { color: '#38bdf8' }, title: { display: true, text: 'Voltage (V)', color: '#38bdf8' }, min: 380, max: 410 },
                         yCurr: { position: 'right', display: false, min: 0, max: 12 },
                         x: { grid: { color: getChartColors().gridColor }, ticks: { color: getChartColors().textColor } }
@@ -300,9 +358,29 @@ function toggleParamDetail(paramKey, btnEl) {
         panel.classList.add('open');
         btnEl.classList.add('open');
         expandedParam = paramKey;
+        updateDetailHeader(paramKey);
         renderFullSpark(paramKey);
     } else {
         expandedParam = null;
+    }
+}
+
+async function updateDetailHeader(paramKey) {
+    const config = PARAM_DETAIL_CONFIG[paramKey];
+    if (!config) return;
+
+    const titleEl = document.getElementById('detail-title-' + paramKey);
+    const rangeEl = document.getElementById('detail-range-' + paramKey);
+    if (titleEl) titleEl.textContent = 'Detail ' + config.title;
+
+    if (rangeEl) {
+        rangeEl.innerHTML = 'Loading range...';
+        try {
+            const rules = await getAlarmRulesCached();
+            rangeEl.innerHTML = buildRangeText(rules, config.thresholdParams, currentDevice);
+        } catch (e) {
+            rangeEl.innerHTML = 'Range: --';
+        }
     }
 }
 
@@ -311,30 +389,31 @@ function renderFullSpark(paramKey) {
     fetch(url)
         .then(r => r.json())
         .then(data => {
-            const colorMap = { temp: '#f97316', vib: '#a855f7', volt: '#38bdf8', current: '#eab308', rpm: '#22c55e' };
-            const fieldMap = { temp: 'temperature', vib: 'vibration', volt: 'voltage', current: 'current', rpm: 'rpm' };            const canvasId = 'spark-' + paramKey + '-full';
+            const config = PARAM_DETAIL_CONFIG[paramKey];
+            if (!config) return;
+            const canvasId = 'spark-' + paramKey + '-full';
 
             if (fullSparkCharts[canvasId]) fullSparkCharts[canvasId].destroy();
+
+            const datasets = config.fields.map(f => ({
+                label: f.label,
+                data: data[f.key],
+                borderColor: f.color,
+                backgroundColor: f.color + '22',
+                borderWidth: 2,
+                tension: 0.4,
+                fill: config.fields.length === 1,
+                pointRadius: 3
+            }));
 
             const ctx = document.getElementById(canvasId).getContext('2d');
             fullSparkCharts[canvasId] = new Chart(ctx, {
                 type: 'line',
-                data: {
-                    labels: data.labels,
-                    datasets: [{
-                        data: data[fieldMap[paramKey]],
-                        borderColor: colorMap[paramKey],
-                        backgroundColor: colorMap[paramKey] + '22',
-                        borderWidth: 2,
-                        tension: 0.4,
-                        fill: true,
-                        pointRadius: 3
-                    }]
-                },
+                data: { labels: data.labels, datasets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
+                    plugins: { legend: { display: config.fields.length > 1, labels: { color: getChartColors().textColor, boxWidth: 12 } } },
                     scales: {
                         x: { grid: { color: getChartColors().gridColor }, ticks: { color: getChartColors().textColor } },
                         y: { grid: { color: getChartColors().gridColor }, ticks: { color: getChartColors().textColor }, beginAtZero: false }
@@ -373,17 +452,27 @@ function fetchAndUpdateMetrics() {
         .then(response => response.json())
         .then(data => {
             document.getElementById('val-health').innerText = data.health_score + "%";
-            document.getElementById('val-rul').innerHTML = data.rul_hours.toLocaleString() + ' <span class="unit">Hrs</span>';
+            document.getElementById('val-rul').innerHTML = Math.round(data.rul_hours).toLocaleString() + ' <span class="unit">Hrs</span>';
             document.getElementById('val-falsealarm').innerText = data.false_alarm_rate + "%";
             document.getElementById('val-failprob').innerText = data.failure_probability + "%";
             document.getElementById('val-failprob-window').innerText = data.risk_window_label || 'Based on current sensor pattern';
             document.getElementById('val-risklevel').innerText = data.failure_probability + "%";
             document.getElementById('val-temperature').innerHTML = data.temperature + ' <span class="unit">C</span>';
-            document.getElementById('val-vibration').innerHTML = data.vibration + ' <span class="unit">mm/s</span>';
-            document.getElementById('val-voltage').innerHTML = data.voltage + ' <span class="unit">V</span>';
-            document.getElementById('val-current').innerHTML = data.current + ' <span class="unit">A</span>';
-            document.getElementById('val-pressure').innerHTML = data.pressure + ' <span class="unit">RPM</span>';
+            document.getElementById('val-pressure').innerHTML = Math.round(data.pressure) + ' <span class="unit">RPM</span>';
             document.getElementById('val-recommendation').innerText = data.recommendation || 'System operating within normal parameters.';
+
+            // BARU: per-fase
+            document.getElementById('val-voltage-l1').innerText = data.voltage_l1 + ' V';
+            document.getElementById('val-voltage-l2').innerText = data.voltage_l2 + ' V';
+            document.getElementById('val-voltage-l3').innerText = data.voltage_l3 + ' V';
+
+            document.getElementById('val-current-l1').innerText = data.current_l1 + ' A';
+            document.getElementById('val-current-l2').innerText = data.current_l2 + ' A';
+            document.getElementById('val-current-l3').innerText = data.current_l3 + ' A';
+
+            document.getElementById('val-vib-x').innerText = data.vibration_x + ' mm/s';
+            document.getElementById('val-vib-y').innerText = data.vibration_y + ' mm/s';
+            document.getElementById('val-vib-z').innerText = data.vibration_z + ' mm/s';
 
             const healthNote = document.getElementById('val-health-note');
             if (data.health_score >= 70) {
@@ -501,7 +590,6 @@ function renderMotorsTable() {
     });
 }
 
-/* SENSOR DATA */
 function loadSensors() {
     fetch('/api/sensors')
         .then(r => r.json())
@@ -518,9 +606,15 @@ function loadSensors() {
                         </div>
                     </td>
                     <td>${s.temperature}</td>
-                    <td>${s.vibration}</td>
-                    <td>${s.voltage}</td>
-                    <td>${s.current}</td>
+                    <td>${s.vibration_x}</td>
+                    <td>${s.vibration_y}</td>
+                    <td>${s.vibration_z}</td>
+                    <td>${s.voltage_l1}</td>
+                    <td>${s.voltage_l2}</td>
+                    <td>${s.voltage_l3}</td>
+                    <td>${s.current_l1}</td>
+                    <td>${s.current_l2}</td>
+                    <td>${s.current_l3}</td>
                     <td>${s.pressure}</td>
                     <td><span class="status-pill ${s.status}"><span class="dot"></span>${s.status}</span></td>
                 `;
@@ -588,6 +682,15 @@ function loadThresholds() {
 
             document.getElementById('slider-pressure').value = data.pressure;
             document.getElementById('val-pressure-threshold').innerText = data.pressure;
+
+            document.getElementById('slider-voltage-high').value = data.voltage_high;
+            document.getElementById('val-voltage-high-threshold').innerText = data.voltage_high;
+
+            document.getElementById('slider-voltage-low').value = data.voltage_low;
+            document.getElementById('val-voltage-low-threshold').innerText = data.voltage_low;
+
+            document.getElementById('slider-current-high').value = data.current_high;
+            document.getElementById('val-current-high-threshold').innerText = data.current_high;
         })
         .catch(error => console.error('Error loading thresholds:', error));
 }
@@ -597,7 +700,10 @@ function saveThresholds() {
         temperature: parseFloat(document.getElementById('slider-temp').value),
         vibration: parseFloat(document.getElementById('slider-vib').value),
         current_deviation: parseFloat(document.getElementById('slider-current').value),
-        pressure: parseFloat(document.getElementById('slider-pressure').value)
+        pressure: parseFloat(document.getElementById('slider-pressure').value),
+        voltage_high: parseFloat(document.getElementById('slider-voltage-high').value),
+        voltage_low: parseFloat(document.getElementById('slider-voltage-low').value),
+        current_high: parseFloat(document.getElementById('slider-current-high').value)
     };
 
     fetch('/api/settings', {
@@ -689,6 +795,7 @@ function switchTab(tabName, navEl) {
     if (tabName === 'forecast') { loadForecastComparePage(); }
     if (tabName === 'condition') { loadConditionAlerts(); }
     if (tabName === 'training') { loadReviewQueue(); loadModelHistory(); }
+    if (tabName === 'settings') { loadAlarmRules(); }
 }
 
 function selectDevice(deviceId) {
@@ -790,7 +897,6 @@ function investigateAlert(deviceId) {
     }
 }
 
-/* SPARKLINE CHARTS */
 let sparklineCharts = {};
 
 function renderSparkline(canvasId, labels, data, color) {
@@ -798,8 +904,13 @@ function renderSparkline(canvasId, labels, data, color) {
     if (!canvas) return;
     
     if (sparklineCharts[canvasId]) {
-        sparklineCharts[canvasId].destroy();
+        const chart = sparklineCharts[canvasId];
+        chart.data.labels = labels;
+        chart.data.datasets[0].data = data;
+        chart.update('none'); 
+        return;
     }
+    
     const ctx = canvas.getContext('2d');
     sparklineCharts[canvasId] = new Chart(ctx, {
         type: 'line',
@@ -819,10 +930,7 @@ function renderSparkline(canvasId, labels, data, color) {
             responsive: true,
             maintainAspectRatio: false,
             plugins: { legend: { display: false } },
-            scales: {
-                x: { display: false },
-                y: { display: false, beginAtZero: false }
-            }
+            scales: { x: { display: false }, y: { display: false, beginAtZero: false } }
         }
     });
 }
@@ -972,16 +1080,23 @@ function submitReport() {
     });
 }
 
+let tickCounter = 0;
+
 setInterval(() => {
+    tickCounter++;
     fetch('/api/tick', { method: 'POST' }).then(() => {
-        fetchAndUpdateMetrics();
-        fetchAndRenderAlerts();
-        loadMotors();
-        loadSensors();
-        loadLogs();
-        updateNotifBadge();
+        fetchAndUpdateMetrics(); 
+        loadSensors();          
+        
+        if (tickCounter % 3 === 0) {
+            loadMotors();
+            loadLogs();
+            fetchAndRenderAlerts();
+            updateNotifBadge();
+            tickCounter = 0;
+        }
     });
-}, 8000);
+}, 30000);
 
 function updateNotifBadge() {
     fetch('/api/notifications')
@@ -1216,7 +1331,6 @@ function combineCurrentAvg(sensors) {
 function loadForecastComparePage() {
     const grid = document.getElementById('forecast-compare-grid');
     
-    // --- FITUR BARU: Tambahkan efek loading sebelum memanggil API ---
     grid.innerHTML = `
         <div style="text-align: center; padding: 60px 20px; color: var(--primary-orange);">
             <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 32px; margin-bottom: 16px;"></i>
@@ -1229,18 +1343,23 @@ function loadForecastComparePage() {
 
     Promise.all([fetch(historyUrl).then(r => r.json()), fetch(forecastUrl).then(r => r.json())])
         .then(([hist, fcst]) => {
-            // Bersihkan indikator loading setelah data dari backend tiba
             grid.innerHTML = '';
-
-            const fcstVibration = combineVibrationRMS(fcst.sensors);
-            const fcstVoltage = combineVoltageAvg(fcst.sensors);
-            const fcstCurrent = combineCurrentAvg(fcst.sensors);   // baru
 
             const params = [
                 { key: 'temperature', label: 'Temperature (°C)', color: '#f97316', histData: hist.temperature, fcstData: fcst.sensors.Temperature },
-                { key: 'vibration', label: 'Vibration (mm/s)', color: '#a855f7', histData: hist.vibration, fcstData: fcstVibration },
-                { key: 'voltage', label: 'Voltage (V)', color: '#38bdf8', histData: hist.voltage, fcstData: fcstVoltage },
-                { key: 'current', label: 'Current (A)', color: '#eab308', histData: hist.current, fcstData: fcstCurrent }, // baru
+
+                { key: 'vib_x', label: 'Vibration X (mm/s)', color: '#a855f7', histData: hist.vibration_x, fcstData: fcst.sensors.Vibration_X },
+                { key: 'vib_y', label: 'Vibration Y (mm/s)', color: '#9333ea', histData: hist.vibration_y, fcstData: fcst.sensors.Vibration_Y },
+                { key: 'vib_z', label: 'Vibration Z (mm/s)', color: '#7e22ce', histData: hist.vibration_z, fcstData: fcst.sensors.Vibration_Z },
+
+                { key: 'volt_l1', label: 'Voltage L1 (V)', color: '#38bdf8', histData: hist.voltage_l1, fcstData: fcst.sensors.Voltage_L1 },
+                { key: 'volt_l2', label: 'Voltage L2 (V)', color: '#0ea5e9', histData: hist.voltage_l2, fcstData: fcst.sensors.Voltage_L2 },
+                { key: 'volt_l3', label: 'Voltage L3 (V)', color: '#0369a1', histData: hist.voltage_l3, fcstData: fcst.sensors.Voltage_L3 },
+
+                { key: 'curr_l1', label: 'Current L1 (A)', color: '#eab308', histData: hist.current_l1, fcstData: fcst.sensors.Current_L1 },
+                { key: 'curr_l2', label: 'Current L2 (A)', color: '#ca8a04', histData: hist.current_l2, fcstData: fcst.sensors.Current_L2 },
+                { key: 'curr_l3', label: 'Current L3 (A)', color: '#a16207', histData: hist.current_l3, fcstData: fcst.sensors.Current_L3 },
+
                 { key: 'rpm', label: 'Rotational Speed (RPM)', color: '#22c55e', histData: hist.rpm, fcstData: fcst.sensors.Rotational_Speed },
             ];
 
@@ -1614,5 +1733,167 @@ function loadModelHistory() {
             console.error('Error loading model history:', err);
             const list = document.getElementById('model-history-list');
             if (list) list.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--danger);">Failed to load history</td></tr>';
+        });
+}
+
+function loadAlarmRules() {
+    fetch('/api/alarm-rules')
+        .then(r => r.json())
+        .then(data => {
+            const body = document.getElementById('alarm-rules-body');
+            body.innerHTML = '';
+            data.forEach(rule => appendAlarmRow(rule));
+            markClean();
+            attachDirtyListeners();
+        });
+}
+
+const AVAILABLE_PARAMETERS = [
+    'Temperature', 'Vibration_X', 'Vibration_Y', 'Vibration_Z',
+    'Voltage_L1', 'Voltage_L2', 'Voltage_L3',
+    'Current_L1', 'Current_L2', 'Current_L3',
+    'Frequency', 'Rotational_Speed',
+    'Voltage_Imbalance_Pct', 'Current_Imbalance_Pct'
+];
+
+function appendAlarmRow(rule = {}) {
+    const body = document.getElementById('alarm-rules-body');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td><input type="text" class="setting-input" value="${rule.name || ''}" data-field="name"></td>
+        <td>
+            <select class="setting-input" data-field="parameter">
+                ${AVAILABLE_PARAMETERS.map(p =>
+                    `<option value="${p}" ${rule.parameter === p ? 'selected' : ''}>${p}</option>`
+                ).join('')}
+            </select>
+        </td>
+        <td>
+            <select class="setting-input" data-field="tier">
+                <option value="warning" ${rule.tier === 'warning' ? 'selected' : ''}>Warning</option>
+                <option value="critical" ${rule.tier === 'critical' ? 'selected' : ''}>Critical</option>
+                <option value="failure" ${rule.tier === 'failure' ? 'selected' : ''}>Failure</option>
+            </select>
+        </td>
+        <td>
+            <select class="setting-input device-select" data-field="device">
+                <option value="All" ${rule.device === 'All' ? 'selected' : ''}>All</option>
+            </select>
+        </td>
+        <td><input type="text" class="setting-input" value="${rule.message || ''}" data-field="message"></td>
+        <td><input type="number" class="setting-input" value="${rule.value || 0}" data-field="value"></td>
+        <td>
+            <select class="setting-input" data-field="condition">
+                <option value="more_than" ${rule.condition === 'more_than' ? 'selected' : ''}>More than</option>
+                <option value="less_than" ${rule.condition === 'less_than' ? 'selected' : ''}>Less than</option>
+            </select>
+        </td>
+        <td><input type="checkbox" ${rule.enabled !== false ? 'checked' : ''} data-field="enabled"></td>
+        <td><button class="btn-icon" onclick="deleteRule('${rule.id || 'new'}', this)"><i class="fa-solid fa-trash"></i></button></td>
+    `;
+    body.appendChild(tr);
+    loadDevicesIntoDropdown(tr.querySelector('.device-select'), rule.device);
+}
+
+// 3. Helper untuk isi dropdown device
+function loadDevicesIntoDropdown(selectEl, selectedVal) {
+    fetch('/api/devices')
+        .then(r => r.json())
+        .then(data => {
+            data.devices.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d;
+                opt.text = d;
+                if (d === selectedVal) opt.selected = true;
+                selectEl.appendChild(opt);
+            });
+        });
+}
+
+function addAlarmRow() {
+    appendAlarmRow();
+    markDirty();
+}
+
+function markDirty() {
+    const btn = document.getElementById('save-all-btn');
+    if (btn) btn.disabled = false;
+}
+
+function markClean() {
+    const btn = document.getElementById('save-all-btn');
+    if (btn) btn.disabled = true;
+}
+
+function attachDirtyListeners() {
+    const body = document.getElementById('alarm-rules-body');
+    body.addEventListener('input', markDirty);
+    body.addEventListener('change', markDirty);
+}
+
+function deleteRule(ruleId, btnEl) {
+    markDirty();
+    const row = btnEl.closest('tr');
+    if (ruleId === 'new') {
+        row.remove();
+        return;
+    }
+    fetch(`/api/alarm-rules/${ruleId}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(() => {
+            row.remove();
+        })
+        .catch(err => {
+            showModal({ type: 'error', title: 'Error', message: 'Failed to delete rule.', buttonText: 'OK' });
+            console.error('Error deleting rule:', err);
+        });
+}
+
+function saveAllAlarmRules() {
+    const rows = document.querySelectorAll('#alarm-rules-body tr');
+    const savePromises = [];
+
+    rows.forEach(row => {
+        const ruleId = row.querySelector('.btn-icon').getAttribute('onclick').match(/deleteRule\('([^']+)'/)[1];
+
+    const payload = {
+            name: row.querySelector('[data-field="name"]').value,
+            parameter: row.querySelector('[data-field="parameter"]').value,
+            tier: row.querySelector('[data-field="tier"]').value,
+            device: row.querySelector('[data-field="device"]').value,
+            message: row.querySelector('[data-field="message"]').value,
+            value: parseFloat(row.querySelector('[data-field="value"]').value) || 0,
+            condition: row.querySelector('[data-field="condition"]').value,
+            enabled: row.querySelector('[data-field="enabled"]').checked,
+        };
+
+        if (ruleId === 'new') {
+            savePromises.push(
+                fetch('/api/alarm-rules', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                }).then(r => r.json())
+            );
+        } else {
+            savePromises.push(
+                fetch(`/api/alarm-rules/${ruleId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                }).then(r => r.json())
+            );
+        }
+    });
+
+    Promise.all(savePromises)
+        .then(() => {
+            alarmRulesCache = null; // invalidate cache biar dashboard sinkron
+            showModal({ type: 'success', title: 'Saved', message: 'All alarm rules have been saved.', buttonText: 'OK' });
+            loadAlarmRules();
+        })
+        .catch(err => {
+            showModal({ type: 'error', title: 'Error', message: 'Failed to save some rules.', buttonText: 'OK' });
+            console.error('Error saving alarm rules:', err);
         });
 }

@@ -228,27 +228,30 @@
                         <div class="card glass-card param-card">
                             <div class="param-icon vib"><i class="fa-solid fa-wave-square"></i></div>
                             <div class="param-info">
-                                <div class="param-label">Vibration</div>
-                                <div class="param-value" id="val-vibration">2.1 <span class="unit">mm/s</span></div>
+                                <div class="param-label">Vibration (X/Y/Z)</div>
+                                <div class="param-value" style="font-size:14px; gap:8px;">
+                                    <span id="val-vib-x">-- mm/s</span>
+                                    <span id="val-vib-y">-- mm/s</span>
+                                    <span id="val-vib-z">-- mm/s</span>
+                                </div>
                             </div>
-                            <div class="spark-wrap">
-                                <canvas id="spark-vib"></canvas>
-                            </div>
+                            <div class="spark-wrap"><canvas id="spark-vib"></canvas></div>
                             <button class="param-expand-btn" onclick="toggleParamDetail('vib', this)">
                                 <i class="fa-solid fa-chevron-down"></i>
                             </button>
                         </div>
 
-                        <!-- FIX: Changed id from val-current to val-voltage -->
-                        <div class="card glass-card param-card">
+                       <div class="card glass-card param-card">
                             <div class="param-icon curr"><i class="fa-solid fa-bolt"></i></div>
                             <div class="param-info">
-                                <div class="param-label">Voltage (Avg)</div>
-                                <div class="param-value" id="val-voltage">-- <span class="unit">V</span></div>
+                                <div class="param-label">Voltage (L1/L2/L3)</div>
+                                <div class="param-value" style="font-size:14px; gap:8px;">
+                                    <span id="val-voltage-l1">-- V</span>
+                                    <span id="val-voltage-l2">-- V</span>
+                                    <span id="val-voltage-l3">-- V</span>
+                                </div>
                             </div>
-                            <div class="spark-wrap">
-                                <canvas id="spark-volt"></canvas>
-                            </div>
+                            <div class="spark-wrap"><canvas id="spark-volt"></canvas></div>
                             <button class="param-expand-btn" onclick="toggleParamDetail('volt', this)">
                                 <i class="fa-solid fa-chevron-down"></i>
                             </button>
@@ -257,12 +260,14 @@
                         <div class="card glass-card param-card">
                             <div class="param-icon amps"><i class="fa-solid fa-plug-circle-bolt"></i></div>
                             <div class="param-info">
-                                <div class="param-label">Current (Avg)</div>
-                                <div class="param-value" id="val-current">-- <span class="unit">A</span></div>
+                                <div class="param-label">Current (L1/L2/L3)</div>
+                                <div class="param-value" style="font-size:14px; gap:8px;">
+                                    <span id="val-current-l1">-- A</span>
+                                    <span id="val-current-l2">-- A</span>
+                                    <span id="val-current-l3">-- A</span>
+                                </div>
                             </div>
-                            <div class="spark-wrap">
-                                <canvas id="spark-current"></canvas>
-                            </div>
+                            <div class="spark-wrap"><canvas id="spark-current"></canvas></div>
                             <button class="param-expand-btn" onclick="toggleParamDetail('current', this)">
                                 <i class="fa-solid fa-chevron-down"></i>
                             </button>
@@ -285,18 +290,38 @@
 
                     <!-- Detail panels -->
                     <div class="param-detail-panel" id="detail-temp">
+                        <div class="detail-panel-header">
+                            <span class="detail-panel-title" id="detail-title-temp">Detail Temperature</span>
+                            <span class="detail-panel-range" id="detail-range-temp">Range: --</span>
+                        </div>
                         <canvas id="spark-temp-full"></canvas>
                     </div>
                     <div class="param-detail-panel" id="detail-vib">
+                        <div class="detail-panel-header">
+                            <span class="detail-panel-title" id="detail-title-vib">Detail Vibration</span>
+                            <span class="detail-panel-range" id="detail-range-vib">Range: --</span>
+                        </div>
                         <canvas id="spark-vib-full"></canvas>
                     </div>
                     <div class="param-detail-panel" id="detail-volt">
+                        <div class="detail-panel-header">
+                            <span class="detail-panel-title" id="detail-title-volt">Detail Voltage</span>
+                            <span class="detail-panel-range" id="detail-range-volt">Range: --</span>
+                        </div>
                         <canvas id="spark-volt-full"></canvas>
                     </div>
                     <div class="param-detail-panel" id="detail-current">
+                        <div class="detail-panel-header">
+                            <span class="detail-panel-title" id="detail-title-current">Detail Current</span>
+                            <span class="detail-panel-range" id="detail-range-current">Range: --</span>
+                        </div>
                         <canvas id="spark-current-full"></canvas>
                     </div>
                     <div class="param-detail-panel" id="detail-rpm">
+                        <div class="detail-panel-header">
+                            <span class="detail-panel-title" id="detail-title-rpm">Detail Rotational Speed</span>
+                            <span class="detail-panel-range" id="detail-range-rpm">Range: --</span>
+                        </div>
                         <canvas id="spark-rpm-full"></canvas>
                     </div>
                 </div>
@@ -422,11 +447,11 @@
                         <thead>
                             <tr>
                                 <th>Motor</th>
-                                <th><i class="fa-solid fa-temperature-half"></i> Temp (C)</th>
-                                <th><i class="fa-solid fa-wave-square"></i> Vibration (mm/s)</th>
-                                <th><i class="fa-solid fa-bolt"></i> Voltage (V)</th>
-                                <th><i class="fa-solid fa-plug-circle-bolt"></i> Current (A)</th>
-                                <th><i class="fa-solid fa-gauge"></i> Rotational Speed (RPM)</th>
+                                <th>Temp (C)</th>
+                                <th>Vib X</th><th>Vib Y</th><th>Vib Z</th>
+                                <th>Volt L1</th><th>Volt L2</th><th>Volt L3</th>
+                                <th>Curr L1</th><th>Curr L2</th><th>Curr L3</th>
+                                <th>RPM</th>
                                 <th>Status</th>
                             </tr>
                         </thead>
@@ -513,53 +538,34 @@
                 </div>
             </div>
 
-            <!-- SETTINGS (admin only) -->
+<!-- SETTINGS (admin only) -->
             <div class="page-section" id="page-settings" style="display: none;">
                 <div class="settings-grid">
-                    <div class="card glass-card">
-                        <div class="card-header"><h3>Alert Thresholds</h3></div>
-                        
-                        <div class="setting-row">
-                            <div class="slider-label-row">
-                                <label>Temperature Warning (C)</label>
-                                <span class="slider-value" id="val-temp-threshold">--</span>
-                            </div>
-                            <input type="range" class="range-slider" id="slider-temp" min="0" max="150" step="1" autocomplete="off"
-                                oninput="document.getElementById('val-temp-threshold').innerText = this.value">
-                        </div>
 
-                        <div class="setting-row">
-                            <div class="slider-label-row">
-                                <label>Vibration Warning (mm/s)</label>
-                                <span class="slider-value" id="val-vib-threshold">--</span>
+                    <div class="card glass-card table-card" style="grid-column: 1 / -1;">
+                        <div class="table-toolbar">
+                            <h3>Alarm Rules</h3>
+                            <button class="btn-outline" onclick="addAlarmRow()"><i class="fa-solid fa-plus" style="margin-right:6px;"></i>Add row</button>
+                        </div>
+                            <div class="table-responsive-wrap">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Parameter</th>
+                                            <th>Tier</th>
+                                            <th>Device</th>
+                                            <th>Message</th>
+                                            <th>Value</th>
+                                            <th>Condition</th>
+                                            <th>Enabled</th>
+                                            <th></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="alarm-rules-body"></tbody>
+                                </table>
                             </div>
-                            <input type="range" class="range-slider" id="slider-vib" min="0" max="20" step="0.1" autocomplete="off"
-                                oninput="document.getElementById('val-vib-threshold').innerText = this.value">
-                        </div>
-
-                        <div class="setting-row">
-                            <div class="slider-label-row">
-                                <label>Current Deviation Limit (%)</label>
-                                <span class="slider-value" id="val-current-threshold">--</span>
-                            </div>
-                            <input type="range" class="range-slider" id="slider-current" min="0" max="50" step="1" autocomplete="off"
-                                oninput="document.getElementById('val-current-threshold').innerText = this.value">
-                        </div>
-
-                        <div class="setting-row">
-                            <div class="slider-label-row">
-                                <label>Pressure Warning (bar)</label>
-                                <span class="slider-value" id="val-pressure-threshold">--</span>
-                            </div>
-                            <input type="range" class="range-slider" id="slider-pressure" min="0" max="15" step="0.1" autocomplete="off"
-                                oninput="document.getElementById('val-pressure-threshold').innerText = this.value">
-                        </div>
-
-                        <div style="display:flex; gap:10px; margin-top:8px;">
-                            <button class="btn-action" onclick="saveThresholds()">Save Thresholds</button>
-                            <button class="btn-outline" onclick="resetThresholds()">Reset to Default</button>
-                        </div>
-                    </div>
+                            <button class="btn-action" id="save-all-btn" style="margin-top:16px;" onclick="saveAllAlarmRules()" disabled>Save All</button>                    </div>
 
                     <div class="card glass-card">
                         <div class="card-header"><h3>AI Model Configuration</h3></div>
@@ -586,7 +592,6 @@
                         </div>
                         <button class="btn-action" style="margin-top: 8px;" onclick="saveConfiguration()">Save Configuration</button>
                     </div>
-                    <!-- End of AI Model Configuration card -->
 
                 </div>
             </div>
