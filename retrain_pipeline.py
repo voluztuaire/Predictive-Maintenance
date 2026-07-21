@@ -192,7 +192,8 @@ def train_candidate(df: pd.DataFrame) -> dict:
             "recall_macro":    round(recall_score(y_test, cond_pred, average="macro", zero_division=0), 4),
             "confusion_matrix": confusion_matrix(y_test, cond_pred, labels=LABEL_ORDER).tolist(),
             "classification_report": classification_report(
-                y_test, cond_pred, target_names=LABEL_ORDER, zero_division=0, output_dict=True),
+                y_test, cond_pred, labels=LABEL_ORDER, target_names=LABEL_ORDER,
+                zero_division=0, output_dict=True),
         },
         "fault_type": {
             "accuracy":   round(accuracy_score(yf_test, fault_pred), 4),
@@ -201,7 +202,8 @@ def train_candidate(df: pd.DataFrame) -> dict:
             "recall_macro":    round(recall_score(yf_test, fault_pred, average="macro", zero_division=0), 4),
             "confusion_matrix": confusion_matrix(yf_test, fault_pred, labels=FAULT_ORDER).tolist(),
             "classification_report": classification_report(
-                yf_test, fault_pred, target_names=FAULT_ORDER, zero_division=0, output_dict=True),
+                yf_test, fault_pred, labels=FAULT_ORDER, target_names=FAULT_ORDER,
+                zero_division=0, output_dict=True),
         },
         "n_train": len(X_train), "n_test": len(X_test),
     }
