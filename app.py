@@ -175,6 +175,7 @@ THRESHOLDS = {
     'RPM_low': {'warning': 1455.0, 'critical': 1450.0, 'failure': 1445.0},
     'Voltage_Imbalance_Pct': {'warning': 0.5, 'critical': 1.0, 'failure': 2.5},
     'Current_Imbalance_Pct': {'warning': 0.6, 'critical': 1.8, 'failure': 3.5},
+    'Power_Factor_low': {'warning': 0.85, 'critical': 0.75, 'failure': 0.65},
 }
 
 # ============================================================
@@ -257,10 +258,11 @@ def get_threshold_alerts(row) -> dict:
                 key = 'RPM_low'
             elif base in ('Current_L1', 'Current_L2', 'Current_L3'):
                 key = f"{base}_high"
+            condition_type = "less_than" if "(low)" in param else "more_than"
             matching_rule = next(
                 (r for r in get_active_rules(motor_id)
-                 if r["parameter"] == base and r["tier"] == tier), None
-            )
+                if r["parameter"] == base and r["tier"] == tier and r["condition"] == condition_type), None
+            )     
             threshold_val = matching_rule["value"] if matching_rule else None
             detail.append({
                 'parameter': param,
@@ -281,6 +283,7 @@ def get_threshold_alerts(row) -> dict:
         'total_violations': n_t,
         'is_labeling_candidate': condition != 'Normal',
         'source': 'threshold_rule',
+        'sensor_data': {c: float(row_dict[c]) for c in SN_SENSOR_COLS if c in row_dict}
     }
 
 # ============================================================
@@ -539,6 +542,18 @@ def predict_row(row):
     else:
         risk_window_label = "Beyond 30-day horizon"
 
+    degradations = [
+        ("Temperature Anomaly", round(100 - temp_score)),
+        ("Vibration Wear", round(100 - vib_score)),
+        ("Rotational Stress", round(100 - rpm_score)),
+        ("Voltage Imbalance", round(100 - volt_score))
+    ]
+    degradation_list = [{"label": d[0], "value": f"{d[1]}%"} for d in sorted(degradations, key=lambda x: -x[1]) if d[1] > 0][:3]
+    if not degradation_list:
+        degradation_list = [{"label": "All parameters normal", "value": "0%"}]
+        
+    confidence = round(85.0 + (health_score / 10.0), 1)
+
     return {
         "condition_label": condition_label,
         "fault_type": fault_pred,
@@ -547,7 +562,9 @@ def predict_row(row):
         "health_score": round(health_score, 1),
         "failure_probability": failure_probability,
         "rul_hours": rul_display,
-        "risk_window_label": risk_window_label
+        "risk_window_label": risk_window_label,
+        "degradation_list": degradation_list,
+        "confidence": f"{confidence}%"
     }
 
 _prediction_cache = {}
@@ -654,6 +671,8 @@ def get_status():
         "recommendation": prediction["recommendation"],
         "probable_cause": prediction["probable_cause"],
         "fault_type": prediction["fault_type"],
+        "degradation_list": prediction["degradation_list"],
+        "confidence": prediction["confidence"],
         "false_alarm_rate": 0.02,
         "temperature": float(row["Temperature"]),
         "vibration": get_vibration_rms(row),
@@ -701,37 +720,55 @@ def get_history():
         "current_l1": window_df["Current_L1"].round(2).tolist(),
         "current_l2": window_df["Current_L2"].round(2).tolist(),
         "current_l3": window_df["Current_L3"].round(2).tolist(),
+        "frequency": window_df["Frequency"].round(2).tolist(),
+        "power_factor": window_df["Power_Factor"].round(2).tolist(),
     })
 
 @app.route("/api/threshold-alerts")
 @login_required
 def api_threshold_alerts():
-    all_flag = request.args.get("all")
-    if all_flag:
-        alerts = []
+    device_id = request.args.get("device")
+    alerts = []
+
+    def check_and_add(mid, res):
+        if res["is_labeling_candidate"]:
+            existing = list_reviews(status="pending", motor_id=mid)
+            if not existing:
+                alerts.append(res)
+
+    if device_id:
+        row = get_row_for_device(device_id)
+        result = get_threshold_alerts(row)
+        check_and_add(device_id, result)
+    else:
         for mid in ALL_MOTOR_IDS:
             row = get_row_for_device(mid)
             result = get_threshold_alerts(row)
-            if result["is_labeling_candidate"]:
-                alerts.append(result)
-        return jsonify({"count": len(alerts), "alerts": alerts})
+            check_and_add(mid, result)
 
-    device_id = request.args.get("device", ALL_MOTOR_IDS[0])
-    row = get_row_for_device(device_id)
-    result = get_threshold_alerts(row)
-    return jsonify(result)
+    return jsonify({"count": len(alerts), "alerts": alerts})
 
 @app.route("/api/expert-review/submit", methods=["POST"])
 @login_required
 def api_submit_review():
-    device_id = request.args.get("device", ALL_MOTOR_IDS[0])
+    payload = request.get_json() or {}
+    device_id = payload.get("device") or request.args.get("device", ALL_MOTOR_IDS[0])
+    timestamp = payload.get("timestamp")
 
     # Cegah duplicate: kalau motor ini udah ada di antrian pending, jangan submit lagi
     existing = list_reviews(status="pending", motor_id=device_id)
     if existing:
         return jsonify({"error": f"{device_id} is already in the pending review queue."}), 400
 
-    row = get_row_for_device(device_id)
+    if timestamp:
+        motor_df = df[(df["motor_id"] == device_id) & (df["timestamp"].astype(str) == str(timestamp))]
+        if len(motor_df) > 0:
+            row = motor_df.iloc[0]
+        else:
+            row = get_row_for_device(device_id)
+    else:
+        row = get_row_for_device(device_id)
+
     alert = get_threshold_alerts(row)
     if not alert["is_labeling_candidate"]:
         return jsonify({"error": "Motor is currently Normal, nothing to review."}), 400
@@ -811,6 +848,35 @@ def api_models_history():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/admin/training-data/pending")
+@login_required
+def api_pending_training_data():
+    if not current_user.is_admin:
+        return jsonify({"error": "Forbidden: admin access required"}), 403
+    path = os.path.join("expert_validation_data", "expert_labeled_data.csv")
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        return jsonify({"rows": [], "count": 0})
+    pending_df = pd.read_csv(path).fillna("")
+    return jsonify({
+        "rows": pending_df.to_dict(orient="records"),
+        "count": len(pending_df)
+    })
+
+@app.route("/api/admin/models/<int:version>/training-data")
+@login_required
+def api_version_training_data(version):
+    if not current_user.is_admin:
+        return jsonify({"error": "Forbidden: admin access required"}), 403
+    path = os.path.join("models", f"v{version}", "training_data_snapshot.csv")
+    if not os.path.exists(path):
+        return jsonify({"error": "Snapshot not found for this version"}), 404
+    snap_df = pd.read_csv(path)
+    return jsonify({
+        "version": version,
+        "rows": snap_df.to_dict(orient="records"),
+        "count": len(snap_df)
+    })
+
 @app.route("/api/alerts")
 @login_required
 def get_alerts():
@@ -864,8 +930,8 @@ def get_alerts():
         alerts.append({
             "type": "safe",
             "icon": "fa-shield",
-            "title": "All Motors Normal",
-            "description": "No degradation patterns detected across monitored motors.",
+            "title": f"{device_id} Normal" if device_id else "All Motors Normal",
+            "description": "No degradation patterns detected." if device_id else "No degradation patterns detected across monitored motors.",
             "time": "Just now",
             "action": None,
             "device_id": None
@@ -939,7 +1005,7 @@ def get_sensors():
             "vibration": get_vibration_rms(row),
             "voltage": get_avg_voltage(row),
             "current": get_avg_current(row),
-            "pressure": float(row["Rotational_Speed"]),
+            "pressure": round(float(row["Rotational_Speed"])),
             "status": status,
             "fault_type": prediction["fault_type"],
             "vibration_x": round(float(row["Vibration_X"]), 2),
@@ -951,6 +1017,8 @@ def get_sensors():
             "current_l1": round(float(row["Current_L1"]), 2),
             "current_l2": round(float(row["Current_L2"]), 2),
             "current_l3": round(float(row["Current_L3"]), 2),
+            "frequency": round(float(row["Frequency"]), 2),
+            "power_factor": round(float(row["Power_Factor"]), 2),
         })
 
     return jsonify(readings)
@@ -1036,7 +1104,7 @@ def get_forecast():
             "Current_L3": result["Current_L3"].round(2).tolist(),
             "Frequency": result["Frequency"].round(2).tolist(),
             "Power_Factor": result["Power_Factor"].round(2).tolist(),
-            "Rotational_Speed": result["Rotational_Speed"].round(1).tolist(),
+            "Rotational_Speed": result["Rotational_Speed"].round(0).astype(int).tolist(),
         }
     })
 

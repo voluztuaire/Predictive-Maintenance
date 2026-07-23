@@ -24,6 +24,9 @@ run; it is a separate, callable pipeline (e.g. triggered from an admin
 """
 
 import os
+os.environ["LOKY_MAX_CPU_COUNT"] = "1"
+os.environ['OMP_NUM_THREADS'] = '1'
+
 import json
 import shutil
 import time
@@ -166,22 +169,22 @@ def train_candidate(df: pd.DataFrame) -> dict:
     X_test_sc  = scaler.transform(X_test)
 
     cond_clf = RandomForestClassifier(
-        n_estimators=100, max_depth=15, min_samples_leaf=5,
-        class_weight='balanced', random_state=42, n_jobs=-1
+        n_estimators=30, max_depth=15, min_samples_leaf=5,
+        class_weight='balanced', random_state=42, n_jobs=1
     )
     cond_clf.fit(X_train_sc, y_train)
     cond_pred = cond_clf.predict(X_test_sc)
 
     fault_clf = RandomForestClassifier(
-        n_estimators=150, max_depth=18, min_samples_leaf=3,
-        class_weight='balanced', random_state=42, n_jobs=-1
+        n_estimators=40, max_depth=18, min_samples_leaf=3,
+        class_weight='balanced', random_state=42, n_jobs=1
     )
     fault_clf.fit(X_train_sc, yf_train)
     fault_pred = fault_clf.predict(X_test_sc)
 
     contam = min(0.499, round((y_train != 'Normal').sum() / len(y_train), 3))
     iso = IsolationForest(contamination=contam, n_estimators=100,
-                          random_state=42, n_jobs=-1)
+                          random_state=42, n_jobs=1)
     iso.fit(X_train_sc[y_train == 'Normal'])
 
     metrics = {
@@ -304,6 +307,12 @@ def run_retraining(base_csv: str = "client_training_dataset.csv",
     passed, reasons = passes_gate(trained["metrics"], deployed_metrics)
 
     vdir = _save_candidate(version, trained)
+
+    # NEW: save the exact combined dataframe used for this training run
+    snapshot_path = os.path.join(vdir, "training_data_snapshot.csv")
+    df.to_csv(snapshot_path, index=False)
+    print(f"[retrain_pipeline] Training data snapshot saved -> {snapshot_path}")
+
     metadata = {
         "version": version,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -322,6 +331,16 @@ def run_retraining(base_csv: str = "client_training_dataset.csv",
         reg["deployed_version"] = version
         print(f"[retrain_pipeline] v{version} PASSED gate -> DEPLOYED "
               f"(previous deployed: v{deployed_version})")
+        
+        # Append expert data to base_csv and clear expert_csv
+        if os.path.exists(expert_csv) and os.path.getsize(expert_csv) > 0:
+            base_df = pd.read_csv(base_csv)
+            expert_df = pd.read_csv(expert_csv)
+            common_cols = [c for c in expert_df.columns if c in base_df.columns]
+            base_df = pd.concat([base_df, expert_df[common_cols]], ignore_index=True)
+            base_df.to_csv(base_csv, index=False)
+            expert_df.iloc[0:0].to_csv(expert_csv, index=False)
+            print(f"[retrain_pipeline] Appended {len(expert_df)} rows to {base_csv} and cleared {expert_csv}")
     else:
         print(f"[retrain_pipeline] v{version} FAILED gate -> NOT deployed. "
               f"Deployed model remains v{deployed_version}.")

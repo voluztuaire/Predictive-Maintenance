@@ -27,7 +27,13 @@ const PARAM_DETAIL_CONFIG = {
     ], thresholdParams: ['Current_L1', 'Current_L2', 'Current_L3'] },
     rpm: { title: 'Rotational Speed', fields: [
         { key: 'rpm', label: 'RPM', color: '#22c55e' }
-    ], thresholdParams: ['Rotational_Speed'] }
+    ], thresholdParams: ['Rotational_Speed'] },
+    freq: { title: 'Frequency', fields: [
+        { key: 'frequency', label: 'Frequency (Hz)', color: '#8b5cf6' }
+    ], thresholdParams: ['Frequency'] },
+    pf: { title: 'Power Factor', fields: [
+        { key: 'power_factor', label: 'Power Factor', color: '#64748b' }
+    ], thresholdParams: ['Power_Factor'] }
 };
 
 let alarmRulesCache = null;
@@ -272,12 +278,12 @@ function initChart() {
                     labels: data.labels,
                     datasets: [
                         { label: 'Temperature (C)', data: data.temperature, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', borderWidth: 2, tension: 0.4, fill: true, yAxisID: 'yTemp' },
-                        { label: 'Voltage L1 (V)', data: data.voltage_l1, borderColor: '#38bdf8', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yVolt' },
-                        { label: 'Voltage L2 (V)', data: data.voltage_l2, borderColor: '#0ea5e9', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yVolt' },
-                        { label: 'Voltage L3 (V)', data: data.voltage_l3, borderColor: '#0369a1', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yVolt' },
-                        { label: 'Current L1 (A)', data: data.current_l1, borderColor: '#eab308', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yCurr' },
-                        { label: 'Current L2 (A)', data: data.current_l2, borderColor: '#ca8a04', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yCurr' },
-                        { label: 'Current L3 (A)', data: data.current_l3, borderColor: '#a16207', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yCurr' }
+                        { label: 'Voltage (V)', data: data.voltage, borderColor: '#38bdf8', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yVolt' },
+                        { label: 'Current (A)', data: data.current, borderColor: '#eab308', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yCurr' },
+                        { label: 'Vibration (mm/s)', data: data.vibration, borderColor: '#ec4899', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yVib' },
+                        { label: 'RPM', data: data.rpm, borderColor: '#22c55e', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yRPM' },
+                        { label: 'Frequency (Hz)', data: data.frequency, borderColor: '#8b5cf6', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yFreq' },
+                        { label: 'Power Factor', data: data.power_factor, borderColor: '#64748b', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yPF' }
                     ]
                 },
                 options: {
@@ -288,6 +294,10 @@ function initChart() {
                         yTemp: { position: 'left', grid: { color: getChartColors().gridColor }, ticks: { color: '#f97316' }, title: { display: true, text: 'Temp (C)', color: '#f97316' } },
                         yVolt: { position: 'right', grid: { display: false }, ticks: { color: '#38bdf8' }, title: { display: true, text: 'Voltage (V)', color: '#38bdf8' }, min: 380, max: 410 },
                         yCurr: { position: 'right', display: false, min: 0, max: 12 },
+                        yVib: { position: 'right', display: false, min: 0, max: 10 },
+                        yRPM: { position: 'right', display: false, min: 1400, max: 1550 },
+                        yFreq: { position: 'right', display: false, min: 45, max: 55 },
+                        yPF: { position: 'right', display: false, min: 0.7, max: 1.0 },
                         x: { grid: { color: getChartColors().gridColor }, ticks: { color: getChartColors().textColor } }
                     }
                 }
@@ -312,7 +322,9 @@ function initFullChart() {
                     datasets: [
                         { label: 'Temperature (C)', data: data.temperature, borderColor: '#f97316', yAxisID: 'y', borderWidth: 2, tension: 0.4, fill: true },
                         { label: 'Vibration (mm/s)', data: data.vibration, borderColor: '#a855f7', yAxisID: 'y', borderWidth: 2, tension: 0.4, fill: false },
-                        { label: 'Voltage (V)', data: data.voltage, borderColor: '#38bdf8', yAxisID: 'y1', borderWidth: 2, tension: 0.4, fill: false }
+                        { label: 'Voltage (V)', data: data.voltage, borderColor: '#38bdf8', yAxisID: 'y1', borderWidth: 2, tension: 0.4, fill: false },
+                        { label: 'Frequency (Hz)', data: data.frequency, borderColor: '#8b5cf6', yAxisID: 'y1', borderWidth: 2, tension: 0.4, fill: false },
+                        { label: 'Power Factor', data: data.power_factor, borderColor: '#64748b', yAxisID: 'y1', borderWidth: 2, tension: 0.4, fill: false }
                     ]
                 },
                 options: {
@@ -455,9 +467,29 @@ function fetchAndUpdateMetrics() {
             document.getElementById('val-failprob').innerText = data.failure_probability + "%";
             document.getElementById('val-failprob-window').innerText = data.risk_window_label || 'Based on current sensor pattern';
             document.getElementById('val-risklevel').innerText = data.failure_probability + "%";
+            // Update risk gauge rotation
+            const riskDeg = Math.round((data.failure_probability / 100) * 360);
+            document.getElementById('risk-gauge').style.setProperty('--risk-deg', `${riskDeg}deg`);
+            
+            // Degradation list
+            if (data.degradation_list) {
+                const degList = document.getElementById('val-degradation-list');
+                if (degList) {
+                    degList.innerHTML = data.degradation_list.map((d, i) => 
+                        `<li><span class="dot ${i === 0 ? 'primary' : 'secondary'}"></span> ${d.label} <span class="dot-value">${d.value}</span></li>`
+                    ).join('');
+                }
+            }
+            // AI Confidence
+            if (data.confidence && document.getElementById('val-ai-confidence')) {
+                document.getElementById('val-ai-confidence').innerText = data.confidence;
+            }
+
             document.getElementById('val-temperature').innerHTML = data.temperature + ' <span class="unit">C</span>';
             document.getElementById('val-pressure').innerHTML = Math.round(data.pressure) + ' <span class="unit">RPM</span>';
             document.getElementById('val-recommendation').innerText = data.recommendation || 'System operating within normal parameters.';
+            document.getElementById('val-frequency').innerHTML = data.frequency + ' <span class="unit">Hz</span>';
+            document.getElementById('val-powerfactor').innerText = data.power_factor;
 
             // BARU: per-fase
             document.getElementById('val-voltage-l1').innerText = data.voltage_l1 + ' V';
@@ -630,6 +662,8 @@ function loadSensors() {
                     <td>${s.current_l2}</td>
                     <td>${s.current_l3}</td>
                     <td>${Math.round(s.pressure)}</td>
+                    <td>${s.frequency}</td>
+                    <td>${s.power_factor}</td>
                     <td><span class="status-pill ${s.status}"><span class="dot"></span>${s.status}</span></td>
                 `;
                 body.appendChild(tr);
@@ -708,7 +742,7 @@ function switchTab(tabName, navEl) {
 
     if (tabName === 'forecast') { loadForecastComparePage(); }
     if (tabName === 'condition') { loadConditionAlerts(); }
-    if (tabName === 'training') { loadReviewQueue(); loadModelHistory(); }
+    if (tabName === 'training') { loadReviewQueue(); loadModelHistory(); loadPendingTrainingData(); }
     if (tabName === 'settings') { loadAlarmRules(); }
 }
 
@@ -859,6 +893,8 @@ function loadSparklines() {
             renderSparkline('spark-volt', data.labels, data.voltage, '#38bdf8');
             renderSparkline('spark-current', data.labels, data.current, '#eab308');
             renderSparkline('spark-rpm', data.labels, data.rpm, '#22c55e');
+            renderSparkline('spark-freq', data.labels, data.frequency, '#8b5cf6');
+            renderSparkline('spark-pf', data.labels, data.power_factor, '#64748b');
         })
         .catch(error => console.error('Error loading sparklines:', error));
 }
@@ -1007,6 +1043,15 @@ setInterval(() => {
             loadLogs();
             fetchAndRenderAlerts();
             updateNotifBadge();
+            const trainingPage = document.getElementById('page-training');
+            if (trainingPage && trainingPage.style.display !== 'none') {
+                loadReviewQueue();
+                loadPendingTrainingData();
+            }
+            const conditionAlertsPage = document.getElementById('page-condition-alerts');
+            if (conditionAlertsPage && conditionAlertsPage.style.display !== 'none') {
+                loadConditionAlerts();
+            }
             tickCounter = 0;
         }
     });
@@ -1036,113 +1081,6 @@ function updateNotifBadge() {
 
 let forecastChartInstance = null;
 
-function initForecastChart() {
-    const url = currentDevice ? `/api/forecast?device=${encodeURIComponent(currentDevice)}&horizon=48` : '/api/forecast?horizon=48';
-    fetch(url)
-        .then(r => r.json())
-        .then(data => {
-            const canvas = document.getElementById('forecastChart');
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            if (forecastChartInstance) forecastChartInstance.destroy();
-            forecastChartInstance = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: data.labels,
-                    datasets: [
-                        { label: 'Predicted Health Score', data: data.predicted_health, borderColor: '#22c55e', yAxisID: 'y', borderWidth: 2, tension: 0.4, fill: false },
-                        { label: 'Predicted RUL (Hrs)', data: data.predicted_rul, borderColor: '#f97316', yAxisID: 'y1', borderWidth: 2, tension: 0.4, fill: false }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: getChartColors().textColor } } },
-                    scales: {
-                        y: { position: 'left', min:0, max:100, ticks: { color: '#22c55e' }, grid: { color: getChartColors().gridColor } },
-                        y1: { position: 'right', ticks: { color: '#f97316' }, grid: { display: false } },
-                        x: { ticks: { color: getChartColors().textColor }, grid: { color: getChartColors().gridColor } }
-                    }
-                }
-            });
-            renderSensorForecastGrid(data.sensors);
-        })
-        .catch(err => console.error('Error loading forecast chart:', err));
-}
-
-let sensorDetailVisible = true;
-
-function toggleSensorDetail() {
-    sensorDetailVisible = !sensorDetailVisible;
-    document.getElementById('sensor-forecast-grid').style.display = sensorDetailVisible ? 'grid' : 'none';
-    document.getElementById('sensor-detail-toggle').innerText = sensorDetailVisible ? 'Hide detail' : 'Show detail';
-}
-
-const SENSOR_LABELS = {
-    Temperature: { name: 'Temperature', unit: '&deg;C' },
-    Vibration_X: { name: 'Vibration X', unit: 'mm/s' },
-    Vibration_Y: { name: 'Vibration Y', unit: 'mm/s' },
-    Vibration_Z: { name: 'Vibration Z', unit: 'mm/s' },
-    Voltage_L1: { name: 'Voltage L1', unit: 'V' },
-    Voltage_L2: { name: 'Voltage L2', unit: 'V' },
-    Voltage_L3: { name: 'Voltage L3', unit: 'V' },
-    Frequency: { name: 'Frequency', unit: 'Hz' },
-    Power_Factor: { name: 'Power Factor', unit: '' },
-    Rotational_Speed: { name: 'Rotational Speed', unit: 'rpm' }
-};
-
-function renderSensorForecastGrid(sensors) {
-    const grid = document.getElementById('sensor-forecast-grid');
-    grid.innerHTML = '';
-
-    Object.keys(sensors).forEach(key => {
-        const series = sensors[key];
-        const meta = SENSOR_LABELS[key] || { name: key, unit: '' };
-        const last = series[series.length - 1];
-        const first = series[0];
-        const trendUp = last > first;
-        const arrow = trendUp ? '\u2197' : (last < first ? '\u2198' : '');
-        const arrowColor = trendUp ? 'var(--danger)' : 'var(--text-muted)';
-
-        const canvasId = 'forecast-spark-' + key;
-        const card = document.createElement('div');
-        card.className = 'card glass-card param-card';
-        card.style.flexDirection = 'column';
-        card.style.alignItems = 'stretch';
-        card.innerHTML = `
-            <div class="param-label">${meta.name}</div>
-            <div class="param-value">${last}${meta.unit ? ' <span class="unit">' + meta.unit + '</span>' : ''}</div>
-            <div class="spark-wrap" style="width:100%;height:50px;margin-top:8px;">
-                <canvas id="${canvasId}"></canvas>
-            </div>
-        `;
-        grid.appendChild(card);
-
-        setTimeout(() => {
-            const ctx = document.getElementById(canvasId).getContext('2d');
-            new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: series.map((_, i) => i),
-                    datasets: [{
-                        data: series,
-                        borderColor: trendUp ? '#ef4444' : getChartColors().textColor,
-                        borderWidth: 2,
-                        pointRadius: 0,
-                        tension: 0.3,
-                        fill: false
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: { x: { display: false }, y: { display: false } }
-                }
-            });
-        }, 0);
-    });
-}
 
 // ============================================================
 // CHATBOT WIDGET
@@ -1275,6 +1213,8 @@ function loadForecastComparePage() {
                 { key: 'curr_l3', label: 'Current L3 (A)', color: '#a16207', histData: hist.current_l3, fcstData: fcst.sensors.Current_L3 },
 
                 { key: 'rpm', label: 'Rotational Speed (RPM)', color: '#22c55e', histData: hist.rpm, fcstData: fcst.sensors.Rotational_Speed },
+                { key: 'freq', label: 'Frequency (Hz)', color: '#8b5cf6', histData: hist.frequency, fcstData: fcst.sensors.Frequency },
+                { key: 'pf', label: 'Power Factor', color: '#64748b', histData: hist.power_factor, fcstData: fcst.sensors.Power_Factor },
             ];
 
             params.forEach(p => {
@@ -1397,7 +1337,7 @@ function renderComboChart(canvasId, histLabels, histData, fcstLabels, fcstData, 
 }
 
 function loadConditionAlerts() {
-    fetch('/api/threshold-alerts?all=1')
+    fetch('/api/threshold-alerts')
         .then(r => r.json())
         .then(data => {
             const container = document.getElementById('condition-alerts-list');
@@ -1429,7 +1369,7 @@ function loadConditionAlerts() {
                     <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
                     <span class="severity-tag ${a.condition_label.toLowerCase()}">${a.total_violations} violation(s)</span>
                             <!-- Tombol baru di bawah ini -->
-                            <button class="btn-action" onclick="submitForReview('${a.motor_id}')">Submit for Review</button>
+                            <button class="btn-action" onclick="submitForReview('${a.motor_id}', '${a.timestamp}')">Submit for Review</button>
                     </div>                
                 `;
                 container.appendChild(row);
@@ -1438,14 +1378,19 @@ function loadConditionAlerts() {
         .catch(err => console.error('Error loading condition alerts:', err));
 }
 
-function submitForReview(deviceId) {
-    fetch(`/api/expert-review/submit?device=${encodeURIComponent(deviceId)}`, { method: 'POST' })
+function submitForReview(deviceId, timestamp) {
+    fetch(`/api/expert-review/submit`, { 
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ device: deviceId, timestamp: timestamp })
+    })
         .then(r => r.json())
         .then(data => {
             if (data.error) {
                 showModal({ type: 'warning', title: 'Cannot Submit', message: data.error, buttonText: 'OK' });
             } else {
                 showModal({ type: 'success', title: 'Submitted', message: `${deviceId} added to expert review queue.`, buttonText: 'OK' });
+                loadConditionAlerts();
             }
         })
         .catch(err => console.error('Error submitting review:', err));
@@ -1524,6 +1469,7 @@ function approveReview(reviewId) {
     .then(() => {
         showModal({ type: 'success', title: 'Approved', message: 'Label saved to training dataset.', buttonText: 'OK' });
         loadReviewQueue();
+        loadPendingTrainingData();
     })
     .catch(err => console.error('Error approving review:', err));
 }
@@ -1542,6 +1488,93 @@ function rejectReview(reviewId) {
     .catch(err => console.error('Error rejecting review:', err));
 }
 
+function loadPendingTrainingData() {
+    fetch('/api/admin/training-data/pending')
+        .then(r => r.json())
+        .then(data => {
+            document.getElementById('pending-count').textContent = data.count;
+            const body = document.getElementById('pending-training-body');
+            body.innerHTML = '';
+            if (data.count === 0) {
+                body.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px; color:var(--text-muted);">No approved expert data yet.</td></tr>';
+                return;
+            }
+            data.rows.forEach(r => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${r.Timestamp || '-'}</td>
+                    <td>${r.Motor_ID || '-'}</td>
+                    <td>${r.Temperature ?? '-'}</td>
+                    <td>${r.Vibration_X ?? '-'}</td>
+                    <td><span class="status-pill ${r.Motor_State}"><span class="dot"></span>${r.Motor_State}</span></td>
+                    <td>${r.Fault_Type_True || '-'}</td>
+                    <td>${r.Expert_ID || '-'}</td>
+                    <td>${r.Reviewed_At ? new Date(r.Reviewed_At).toLocaleString() : '-'}</td>
+                `;
+                body.appendChild(tr);
+            });
+        })
+        .catch(err => console.error('Error loading pending training data:', err));
+}
+
+function openSnapshotModal(version) {
+    fetch(`/api/admin/models/${version}/training-data`)
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                showModal({ type: 'warning', title: 'No Snapshot', message: data.error, buttonText: 'OK' });
+                return;
+            }
+            document.getElementById('snapshot-modal-title').textContent = `Training Data Used — v${version} (${data.count} rows)`;
+            const head = document.getElementById('snapshot-table-head');
+            const body = document.getElementById('snapshot-table-body');
+            head.innerHTML = '';
+            body.innerHTML = '';
+            
+            if (data.rows.length > 0) {
+                const preferredOrder = [
+                    'Timestamp', 'Motor_ID', 
+                    'Voltage_L1', 'Voltage_L2', 'Voltage_L3', 
+                    'Current_L1', 'Current_L2', 'Current_L3', 
+                    'Frequency', 'Power_Factor', 
+                    'Temperature', 'Vibration_X', 'Vibration_Y', 'Vibration_Z', 
+                    'Rotational_Speed', 'Motor_State', 'Fault_Type_True'
+                ];
+                const actualKeys = Object.keys(data.rows[0]);
+                const keys = preferredOrder.filter(k => actualKeys.includes(k));
+                actualKeys.forEach(k => {
+                    if (!keys.includes(k)) keys.push(k);
+                });
+
+                const headTr = document.createElement('tr');
+                keys.forEach(k => {
+                    const th = document.createElement('th');
+                    th.textContent = k.replace(/_/g, ' ');
+                    headTr.appendChild(th);
+                });
+                head.appendChild(headTr);
+
+                // Show the last 100 rows, reversed (newest first)
+                const displayRows = data.rows.slice(-100).reverse();
+                displayRows.forEach(r => { 
+                    const tr = document.createElement('tr');
+                    keys.forEach(k => {
+                        const td = document.createElement('td');
+                        td.textContent = r[k] !== null && r[k] !== undefined ? r[k] : '-';
+                        tr.appendChild(td);
+                    });
+                    body.appendChild(tr);
+                });
+            }
+            document.getElementById('snapshot-modal').classList.add('open');
+        })
+        .catch(err => console.error('Error loading snapshot:', err));
+}
+
+function closeSnapshotModal() {
+    document.getElementById('snapshot-modal').classList.remove('open');
+}
+
 function triggerRetrain() {
     const resultBox = document.getElementById('retrain-result');
     resultBox.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Retraining in progress, this may take a minute...';
@@ -1549,52 +1582,76 @@ function triggerRetrain() {
     fetch('/api/admin/retrain', { method: 'POST' })
         .then(r => r.json())
         .then(data => {
-            const status = data.deployed ? '<span style="color:var(--success);">DEPLOYED</span>' : '<span style="color:var(--danger);">NOT deployed (failed quality gate)</span>';
-            
-            let confHtml = '';
-            if (data.metrics && data.metrics.condition && data.metrics.condition.confusion_matrix) {
-                const labels = ['Normal', 'Warning', 'Critical', 'Failure'];
-                const matrix = data.metrics.condition.confusion_matrix;
-                
-                confHtml += '<div class="conf-matrix-wrapper">';
-                confHtml += '<h4 style="margin-bottom:8px; color:var(--text-main);">Condition Confusion Matrix (Actual \ Predicted)</h4>';
-                confHtml += '<table class="conf-matrix-table">';
-                confHtml += '<thead><tr><th></th>';
-                labels.forEach(l => confHtml += `<th>${l}</th>`);
-                confHtml += '</tr></thead><tbody>';
-                
-                for(let i=0; i<matrix.length; i++) {
-                    confHtml += `<tr><th>${labels[i]}</th>`;
-                    for(let j=0; j<matrix[i].length; j++) {
-                        const val = matrix[i][j];
-                        let cellClass = 'conf-cell-empty';
-                        if (val > 0) {
-                            if (i === j) cellClass = 'conf-cell-correct';
-                            else cellClass = 'conf-cell-error';
-                        }
-                        confHtml += `<td class="${cellClass}">${val}</td>`;
-                    }
-                    confHtml += '</tr>';
-                }
-                confHtml += '</tbody></table></div>';
+            if (data.status === 'started' || data.status === 'already_running') {
+                // Start polling
+                const pollInterval = setInterval(() => {
+                    fetch('/api/admin/retrain/status')
+                        .then(r => r.json())
+                        .then(statusData => {
+                            if (statusData.status === 'completed') {
+                                clearInterval(pollInterval);
+                                renderRetrainResult(statusData.result, resultBox);
+                            } else if (statusData.status === 'error') {
+                                clearInterval(pollInterval);
+                                resultBox.innerHTML = '<span style="color:var(--danger);">Retrain failed: ' + statusData.error + '</span>';
+                            }
+                        })
+                        .catch(err => {
+                            clearInterval(pollInterval);
+                            resultBox.innerHTML = '<span style="color:var(--danger);">Polling failed: ' + err + '</span>';
+                        });
+                }, 3000);
+            } else {
+                resultBox.innerHTML = '<span style="color:var(--danger);">Unexpected response: ' + JSON.stringify(data) + '</span>';
             }
-
-            resultBox.innerHTML = `
-                <div style="margin-bottom: 12px; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px; border: 1px solid var(--border-color);">
-                    <strong>Version v${data.version}: ${status}</strong><br>
-                    Condition F1 macro: ${data.metrics.condition.f1_macro}<br>
-                    Fault-type F1 macro: ${data.metrics.fault_type.f1_macro}<br>
-                    ${data.gate_failure_reasons && data.gate_failure_reasons.length ? '<div style="color:var(--danger); margin-top:8px;">Reasons: ' + data.gate_failure_reasons.join(', ') + '</div>' : ''}
-                </div>
-                ${confHtml}
-            `;
-            loadModelHistory();
         })
         .catch(err => {
-            resultBox.innerHTML = '<span style="color:var(--danger);">Retrain failed: ' + err + '</span>';
+            resultBox.innerHTML = '<span style="color:var(--danger);">Failed to start retrain: ' + err + '</span>';
         });
 }
 
+function renderRetrainResult(data, resultBox) {
+    const status = data.deployed ? '<span style="color:var(--success);">DEPLOYED</span>' : '<span style="color:var(--danger);">NOT deployed (failed quality gate)</span>';
+    
+    let confHtml = '';
+    if (data.metrics && data.metrics.condition && data.metrics.condition.confusion_matrix) {
+        const labels = ['Normal', 'Warning', 'Critical', 'Failure'];
+        const matrix = data.metrics.condition.confusion_matrix;
+        
+        confHtml += '<div class="conf-matrix-wrapper">';
+        confHtml += '<h4 style="margin-bottom:8px; color:var(--text-main);">Condition Confusion Matrix (Actual \\ Predicted)</h4>';
+        confHtml += '<table class="conf-matrix-table">';
+        confHtml += '<thead><tr><th></th>';
+        labels.forEach(l => confHtml += `<th>${l}</th>`);
+        confHtml += '</tr></thead><tbody>';
+        
+        for(let i=0; i<matrix.length; i++) {
+            confHtml += `<tr><th>${labels[i]}</th>`;
+            for(let j=0; j<matrix[i].length; j++) {
+                const val = matrix[i][j];
+                let cellClass = 'conf-cell-empty';
+                if (val > 0) {
+                    if (i === j) cellClass = 'conf-cell-correct';
+                    else cellClass = 'conf-cell-error';
+                }
+                confHtml += `<td class="${cellClass}">${val}</td>`;
+            }
+            confHtml += '</tr>';
+        }
+        confHtml += '</tbody></table></div>';
+    }
+
+    resultBox.innerHTML = `
+        <div style="margin-bottom: 12px; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px; border: 1px solid var(--border-color);">
+            <strong>Version v${data.version}: ${status}</strong><br>
+            Condition F1 macro: ${data.metrics.condition.f1_macro}<br>
+            Fault-type F1 macro: ${data.metrics.fault_type.f1_macro}<br>
+            ${data.gate_failure_reasons && data.gate_failure_reasons.length ? '<div style="color:var(--danger); margin-top:8px;">Reasons: ' + data.gate_failure_reasons.join(', ') + '</div>' : ''}
+        </div>
+        ${confHtml}
+    `;
+    loadModelHistory();
+}
 function loadModelHistory() {
     fetch('/api/admin/models/history')
         .then(r => r.json())
@@ -1603,12 +1660,12 @@ function loadModelHistory() {
             if (!list) return;
             
             if (data.error) {
-                list.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--danger);">${data.error}</td></tr>`;
+                list.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--danger);">${data.error}</td></tr>`;
                 return;
             }
 
             if (!data.history || data.history.length === 0) {
-                list.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:20px; color:var(--text-muted);">No training history found.</td></tr>';
+                list.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:20px; color:var(--text-muted);">No training history found.</td></tr>';
                 return;
             }
 
@@ -1638,6 +1695,7 @@ function loadModelHistory() {
                         <td>${condF1}</td>
                         <td>${faultF1}</td>
                         <td>${rows}</td>
+                        <td><button class="row-action-btn" onclick="openSnapshotModal(${h.version})" title="View training data"><i class="fa-solid fa-table"></i></button></td>
                     </tr>
                 `;
             });
@@ -1646,7 +1704,7 @@ function loadModelHistory() {
         .catch(err => {
             console.error('Error loading model history:', err);
             const list = document.getElementById('model-history-list');
-            if (list) list.innerHTML = '<tr><td colspan="6" style="text-align:center; color:var(--danger);">Failed to load history</td></tr>';
+            if (list) list.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--danger);">Failed to load history</td></tr>';
         });
 }
 

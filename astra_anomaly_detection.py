@@ -38,6 +38,8 @@
 # ============================================================
 
 import os
+os.environ["LOKY_MAX_CPU_COUNT"] = "1"
+os.environ['OMP_NUM_THREADS'] = '1'
 import time
 import json
 import warnings
@@ -232,6 +234,7 @@ THRESHOLDS = {
     # reference points rather than dataset percentiles).
     'Voltage_Imbalance_Pct': {'warning': 0.5, 'critical': 1.0, 'failure': 2.5},
     'Current_Imbalance_Pct': {'warning': 0.6, 'critical': 1.8, 'failure': 3.5},
+    'Power_Factor_low': {'warning': 0.85, 'critical': 0.75, 'failure': 0.65},
 }
 
 print("\n  Threshold rules:")
