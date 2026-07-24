@@ -656,6 +656,34 @@ def delete_alarm_rule(rule_id):
     invalidate_rules_cache()          
     return jsonify({"status": "deleted"})
 
+def get_last_trained_label():
+    """Ambil waktu training model yang sedang deployed dari registry.json,
+    dikonversi jadi teks relatif ('X hours ago') biar sama gayanya dengan
+    placeholder lama."""
+    try:
+        from retrain_pipeline import _load_registry
+        reg = _load_registry()
+        deployed_version = reg.get("deployed_version")
+        if deployed_version is None:
+            return "Not yet trained"
+        entry = next((h for h in reg["history"] if h["version"] == deployed_version), None)
+        if not entry or not entry.get("created_at"):
+            return "Unknown"
+        created_at = datetime.fromisoformat(entry["created_at"])
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=__import__("datetime").timezone.utc)
+        now = datetime.now(created_at.tzinfo)
+        delta = now - created_at
+        hours = delta.total_seconds() / 3600
+        if hours < 1:
+            return f"{int(delta.total_seconds() / 60)} minutes ago"
+        elif hours < 24:
+            return f"{int(hours)} hours ago"
+        else:
+            return f"{int(hours // 24)} days ago"
+    except Exception:
+        return "Unknown"
+
 @app.route("/api/status")
 @login_required
 def get_status():
@@ -673,6 +701,8 @@ def get_status():
         "fault_type": prediction["fault_type"],
         "degradation_list": prediction["degradation_list"],
         "confidence": prediction["confidence"],
+        "patterns_monitored": len(SH_FEATURE_COLS),
+        "last_trained": get_last_trained_label(),
         "false_alarm_rate": 0.02,
         "temperature": float(row["Temperature"]),
         "vibration": get_vibration_rms(row),

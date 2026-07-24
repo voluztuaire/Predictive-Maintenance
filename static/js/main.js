@@ -485,6 +485,14 @@ function fetchAndUpdateMetrics() {
                 document.getElementById('val-ai-confidence').innerText = data.confidence;
             }
 
+            // Patterns Monitored & Last Trained
+            if (document.getElementById('val-patterns-monitored')) {
+                document.getElementById('val-patterns-monitored').innerText = data.patterns_monitored + ' Parameters';
+            }
+            if (document.getElementById('val-last-trained')) {
+                document.getElementById('val-last-trained').innerText = data.last_trained;
+            }
+
             document.getElementById('val-temperature').innerHTML = data.temperature + ' <span class="unit">C</span>';
             document.getElementById('val-pressure').innerHTML = Math.round(data.pressure) + ' <span class="unit">RPM</span>';
             document.getElementById('val-recommendation').innerText = data.recommendation || 'System operating within normal parameters.';
@@ -1495,21 +1503,36 @@ function loadPendingTrainingData() {
             document.getElementById('pending-count').textContent = data.count;
             const body = document.getElementById('pending-training-body');
             body.innerHTML = '';
+            
+            // Jika kosong, tampilkan pesan dengan colspan 20 (sesuai jumlah kolom)
             if (data.count === 0) {
-                body.innerHTML = '<tr><td colspan="8" style="text-align:center; padding:20px; color:var(--text-muted);">No approved expert data yet.</td></tr>';
+                body.innerHTML = '<tr><td colspan="20" style="text-align:center; padding:20px; color:var(--text-muted);">No approved expert data yet.</td></tr>';
                 return;
             }
+            
             data.rows.forEach(r => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
-                    <td>${r.Timestamp || '-'}</td>
+                    <td style="white-space:nowrap;">${r.Timestamp || '-'}</td>
                     <td>${r.Motor_ID || '-'}</td>
                     <td>${r.Temperature ?? '-'}</td>
                     <td>${r.Vibration_X ?? '-'}</td>
+                    <td>${r.Vibration_Y ?? '-'}</td>
+                    <td>${r.Vibration_Z ?? '-'}</td>
+                    <td>${r.Voltage_L1 ?? '-'}</td>
+                    <td>${r.Voltage_L2 ?? '-'}</td>
+                    <td>${r.Voltage_L3 ?? '-'}</td>
+                    <td>${r.Current_L1 ?? '-'}</td>
+                    <td>${r.Current_L2 ?? '-'}</td>
+                    <td>${r.Current_L3 ?? '-'}</td>
+                    <td>${r.Frequency ?? '-'}</td>
+                    <td>${r.Power_Factor ?? '-'}</td>
+                    <td>${r.Rotational_Speed ?? '-'}</td>
                     <td><span class="status-pill ${r.Motor_State}"><span class="dot"></span>${r.Motor_State}</span></td>
                     <td>${r.Fault_Type_True || '-'}</td>
                     <td>${r.Expert_ID || '-'}</td>
-                    <td>${r.Reviewed_At ? new Date(r.Reviewed_At).toLocaleString() : '-'}</td>
+                    <td style="white-space:nowrap;">${r.Reviewed_At ? new Date(r.Reviewed_At).toLocaleString() : '-'}</td>
+                    <td>${r.Review_Notes || '-'}</td>
                 `;
                 body.appendChild(tr);
             });
@@ -1582,28 +1605,11 @@ function triggerRetrain() {
     fetch('/api/admin/retrain', { method: 'POST' })
         .then(r => r.json())
         .then(data => {
-            if (data.status === 'started' || data.status === 'already_running') {
-                // Start polling
-                const pollInterval = setInterval(() => {
-                    fetch('/api/admin/retrain/status')
-                        .then(r => r.json())
-                        .then(statusData => {
-                            if (statusData.status === 'completed') {
-                                clearInterval(pollInterval);
-                                renderRetrainResult(statusData.result, resultBox);
-                            } else if (statusData.status === 'error') {
-                                clearInterval(pollInterval);
-                                resultBox.innerHTML = '<span style="color:var(--danger);">Retrain failed: ' + statusData.error + '</span>';
-                            }
-                        })
-                        .catch(err => {
-                            clearInterval(pollInterval);
-                            resultBox.innerHTML = '<span style="color:var(--danger);">Polling failed: ' + err + '</span>';
-                        });
-                }, 3000);
-            } else {
-                resultBox.innerHTML = '<span style="color:var(--danger);">Unexpected response: ' + JSON.stringify(data) + '</span>';
+            if (data.error) {
+                resultBox.innerHTML = '<span style="color:var(--danger);">' + data.error + '</span>';
+                return;
             }
+            renderRetrainResult(data, resultBox);
         })
         .catch(err => {
             resultBox.innerHTML = '<span style="color:var(--danger);">Failed to start retrain: ' + err + '</span>';
