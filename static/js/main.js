@@ -722,15 +722,6 @@ function renderLogsList() {
     });
 }
 
-function saveConfiguration() {
-    showModal({
-        type: 'success',
-        title: 'Configuration Saved',
-        message: 'AI model configuration has been updated successfully.',
-        buttonText: 'OK'
-    });
-}
-
 /* TAB SWITCHING */
 function switchTab(tabName, navEl) {
     const items = document.querySelectorAll('.nav-item');
@@ -1578,7 +1569,7 @@ function openSnapshotModal(version) {
                 head.appendChild(headTr);
 
                 // Show the last 100 rows, reversed (newest first)
-                const displayRows = data.rows.slice(-100).reverse();
+                const displayRows = data.rows.slice().reverse();
                 displayRows.forEach(r => { 
                     const tr = document.createElement('tr');
                     keys.forEach(k => {
@@ -1657,7 +1648,9 @@ function renderRetrainResult(data, resultBox) {
         ${confHtml}
     `;
     loadModelHistory();
+    loadPendingTrainingData();   
 }
+
 function loadModelHistory() {
     fetch('/api/admin/models/history')
         .then(r => r.json())
@@ -1688,8 +1681,8 @@ function loadModelHistory() {
                     statusBadge = '<span class="severity-tag failure">Failed Gate</span>';
                 }
 
-                const condF1 = h.metrics && h.metrics.condition ? h.metrics.condition.f1_macro.toFixed(3) : '-';
-                const faultF1 = h.metrics && h.metrics.fault_type ? h.metrics.fault_type.f1_macro.toFixed(3) : '-';
+                const condF1 = h.metrics && h.metrics.condition && h.metrics.condition.f1_macro != null ? h.metrics.condition.f1_macro.toFixed(3) : '-';
+                const faultF1 = h.metrics && h.metrics.fault_type && h.metrics.fault_type.f1_macro != null ? h.metrics.fault_type.f1_macro.toFixed(3) : '-';
                 const rows = h.metrics && h.metrics.training_rows ? h.metrics.training_rows : '-';
                 const dateText = h.created_at ? new Date(h.created_at).toLocaleString() : '-';
 
@@ -1701,8 +1694,11 @@ function loadModelHistory() {
                         <td>${condF1}</td>
                         <td>${faultF1}</td>
                         <td>${rows}</td>
-                        <td><button class="row-action-btn" onclick="openSnapshotModal(${h.version})" title="View training data"><i class="fa-solid fa-table"></i></button></td>
-                    </tr>
+                        <td>
+                            <button class="row-action-btn" onclick="openSnapshotModal(${h.version})" title="View training data"><i class="fa-solid fa-table"></i></button>
+                            ${h.passed_gate ? `<button class="row-action-btn" onclick="deployModelVersion(${h.version})" title="${data.deployed_version === h.version ? 'Currently active' : 'Deploy this version'}" style="margin-left:6px;" ${data.deployed_version === h.version ? 'disabled' : ''}><i class="fa-solid fa-rocket"></i></button>` : ''}
+                        </td>
+                        </tr>
                 `;
             });
             list.innerHTML = html;
@@ -1712,6 +1708,28 @@ function loadModelHistory() {
             const list = document.getElementById('model-history-list');
             if (list) list.innerHTML = '<tr><td colspan="7" style="text-align:center; color:var(--danger);">Failed to load history</td></tr>';
         });
+}
+
+function deployModelVersion(version) {
+    showModal({
+        type: 'confirm',
+        title: 'Deploy Model Version',
+        message: `Deploy v${version} as the active model? Other versions (including the current one) remain saved and you can switch back anytime.`,
+        confirmText: 'Deploy', 
+        onConfirm: () => {
+            fetch(`/api/admin/models/${version}/deploy`, { method: 'POST' })
+                .then(r => r.json())
+                .then(data => {
+                    if (data.error) {
+                        showModal({ type: 'error', title: 'Deploy Failed', message: data.error, buttonText: 'OK' });
+                        return;
+                    }
+                    showModal({ type: 'success', title: 'Deployed', message: `v${version} is now the active model.`, buttonText: 'OK' });
+                    loadModelHistory();
+                    fetchAndUpdateMetrics();
+                });
+        }
+    });
 }
 
 function loadAlarmRules() {

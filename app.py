@@ -97,6 +97,20 @@ sn_scaler = joblib.load(os.path.join(MODEL_DIR, "condition_scaler_v2_with_curren
 sn_rul_model = joblib.load(os.path.join(MODEL_DIR, "rul_iso.joblib"))
 sn_health_model = joblib.load(os.path.join(MODEL_DIR, "health_iso.joblib"))
 
+def load_live_condition_models(version=None):
+    """Ganti condition_clf + sh_scaler yang lagi dipakai live inference.
+    version=None -> pakai model default di models/ (artifact awal SH).
+    version=N    -> pakai model hasil retrain di models/vN/."""
+    global condition_clf, sh_scaler
+    if version is None:
+        condition_clf = joblib.load(os.path.join(MODEL_DIR, "condition_classifier.joblib"))
+        sh_scaler = joblib.load(os.path.join(MODEL_DIR, "condition_scaler.joblib"))
+    else:
+        vdir = os.path.join(MODEL_DIR, f"v{version}")
+        condition_clf = joblib.load(os.path.join(vdir, "condition_classifier.joblib"))
+        sh_scaler = joblib.load(os.path.join(vdir, "condition_scaler.joblib"))
+
+
 SN_SENSOR_COLS = [
     "Voltage_L1", "Voltage_L2", "Voltage_L3",
     "Current_L1", "Current_L2", "Current_L3",
@@ -897,15 +911,38 @@ def api_pending_training_data():
 def api_version_training_data(version):
     if not current_user.is_admin:
         return jsonify({"error": "Forbidden: admin access required"}), 403
+    if version == 0:
+        return jsonify({"error": "v0 is the baseline model delivered at project handover — no training snapshot was saved for it."}), 404
     path = os.path.join("models", f"v{version}", "training_data_snapshot.csv")
     if not os.path.exists(path):
         return jsonify({"error": "Snapshot not found for this version"}), 404
     snap_df = pd.read_csv(path)
+    total_count = len(snap_df)
+    display_df = snap_df.tail(100)  # cuma kirim 100 baris terakhir
     return jsonify({
         "version": version,
-        "rows": snap_df.to_dict(orient="records"),
-        "count": len(snap_df)
+        "rows": display_df.to_dict(orient="records"),
+        "count": total_count
     })
+
+@app.route("/api/admin/models/<int:version>/deploy", methods=["POST"])
+@login_required
+def api_deploy_model_version(version):
+    if not current_user.is_admin:
+        return jsonify({"error": "Forbidden: admin access required"}), 403
+
+    vdir = os.path.join(MODEL_DIR, f"v{version}")
+    if not os.path.isdir(vdir):
+        return jsonify({"error": f"Version v{version} not found"}), 404
+
+    from retrain_pipeline import rollback_to
+    try:
+        result = rollback_to(version)      # cuma update registry.json
+        load_live_condition_models(version) # ini yang beneran swap model live
+        _prediction_cache.clear()           # biar prediksi lama gak ke-cache
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/alerts")
 @login_required
@@ -1285,6 +1322,33 @@ with app.app_context():
         db.session.add_all(default_rules)
         db.session.commit()
         print(f"Seeded {len(default_rules)} default alarm rules ({len(THRESHOLDS)} params x 3 tiers) from THRESHOLDS.")
+
+# ============================================================
+# REGISTER BASELINE MODEL AS v0 (kalau belum pernah diregister)
+# ============================================================
+def ensure_baseline_model_registered():
+    from retrain_pipeline import _load_registry, _save_registry, MODELS_DIR
+    reg = _load_registry()
+    if any(h["version"] == 0 for h in reg["history"]):
+        return  # sudah pernah didaftarkan
+
+    v0_dir = os.path.join(MODELS_DIR, "v0")
+    os.makedirs(v0_dir, exist_ok=True)
+    import shutil
+    shutil.copy(os.path.join(MODEL_DIR, "condition_classifier.joblib"), os.path.join(v0_dir, "condition_classifier.joblib"))
+    shutil.copy(os.path.join(MODEL_DIR, "condition_scaler.joblib"), os.path.join(v0_dir, "condition_scaler.joblib"))
+
+    reg["history"].insert(0, {
+        "version": 0,
+        "metrics": {"condition": {"f1_macro": None}, "fault_type": {"f1_macro": None}},
+        "passed_gate": True,
+        "created_at": "Baseline (initial delivery)",
+    })
+    if reg["deployed_version"] is None:
+        reg["deployed_version"] = 0
+    _save_registry(reg)
+
+ensure_baseline_model_registered()
 
 # ============================================================
 # CHATBOT INTEGRATION (Ollama LLM)

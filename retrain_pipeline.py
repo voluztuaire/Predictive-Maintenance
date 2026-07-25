@@ -244,7 +244,7 @@ def passes_gate(candidate_metrics: dict, deployed_metrics: Optional[dict],
         reasons.append(
             f"fault-type F1 macro {f['f1_macro']} < floor {gate['min_fault_f1_macro']}")
 
-    if deployed_metrics is not None:
+    if deployed_metrics is not None and deployed_metrics["condition"]["f1_macro"] is not None:
         prev_f1 = deployed_metrics["condition"]["f1_macro"]
         drop = prev_f1 - c["f1_macro"]
         if drop > gate["max_f1_macro_regression"]:
@@ -331,16 +331,21 @@ def run_retraining(base_csv: str = "client_training_dataset.csv",
         reg["deployed_version"] = version
         print(f"[retrain_pipeline] v{version} PASSED gate -> DEPLOYED "
               f"(previous deployed: v{deployed_version})")
-        
-        # Append expert data to base_csv and clear expert_csv
+
+        # Archive expert rows yang barusan dipakai (bukan digabung ke base_csv,
+        # cuma dipindah biar gak numpuk selamanya di tabel Pending)
         if os.path.exists(expert_csv) and os.path.getsize(expert_csv) > 0:
-            base_df = pd.read_csv(base_csv)
+            archive_csv = os.path.join(os.path.dirname(expert_csv), "expert_labeled_data_used.csv")
             expert_df = pd.read_csv(expert_csv)
-            common_cols = [c for c in expert_df.columns if c in base_df.columns]
-            base_df = pd.concat([base_df, expert_df[common_cols]], ignore_index=True)
-            base_df.to_csv(base_csv, index=False)
+            if os.path.exists(archive_csv) and os.path.getsize(archive_csv) > 0:
+                archive_df = pd.read_csv(archive_csv)
+                combined_archive = pd.concat([archive_df, expert_df], ignore_index=True)
+            else:
+                combined_archive = expert_df
+            combined_archive.to_csv(archive_csv, index=False)
             expert_df.iloc[0:0].to_csv(expert_csv, index=False)
-            print(f"[retrain_pipeline] Appended {len(expert_df)} rows to {base_csv} and cleared {expert_csv}")
+            print(f"[retrain_pipeline] Archived {len(expert_df)} used rows to {archive_csv}, "
+                  f"cleared {expert_csv}. Nothing merged into {base_csv}.")
     else:
         print(f"[retrain_pipeline] v{version} FAILED gate -> NOT deployed. "
               f"Deployed model remains v{deployed_version}.")
