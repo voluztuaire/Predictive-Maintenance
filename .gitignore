@@ -33,3 +33,5 @@ Thumbs.db
 models/
 
 code.txt
+expert_validation_data/
+registry.json

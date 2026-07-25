@@ -1217,13 +1217,27 @@ def generate_report():
 
         elements.append(Paragraph(f"Motor: {device_id}", styles["Heading2"]))
 
+        # --- KODE BARU: Mengambil rentang waktu data ---
+        motor_hist = df[df["motor_id"] == device_id].sort_values("timestamp").tail(30)
+        if not motor_hist.empty:
+            # Ubah formatnya di sini jadi "%H:%M" saja
+            start_time = motor_hist["timestamp"].iloc[0].strftime("%H:%M")
+            end_time = motor_hist["timestamp"].iloc[-1].strftime("%H:%M")
+            elements.append(Paragraph(f"<b>Data Time Range:</b> {start_time} to {end_time}", styles["Normal"]))
+            elements.append(Spacer(1, 0.3*cm))
+        # -----------------------------------------------
+        
         table_data = [["Field", "Value"]]
+        
+        # --- KODE BARU: Menambahkan freq dan pf ---
         field_map = {
             "temperature": ("Temperature (C)", str(round(float(row["Temperature"]), 1))),
             "vibration": ("Vibration RMS (mm/s)", str(get_vibration_rms(row))),
             "voltage": ("Voltage Avg (V)", str(get_avg_voltage(row))),
             "current": ("Current Avg (A)", str(get_avg_current(row))),
             "rpm": ("Rotational Speed (RPM)", str(round(float(row["Rotational_Speed"])))),
+            "freq": ("Frequency (Hz)", str(round(float(row["Frequency"]), 2))),
+            "pf": ("Power Factor", str(round(float(row["Power_Factor"]), 2))),
         }
         for f in selected_fields:
             if f in field_map:
@@ -1254,22 +1268,33 @@ def generate_report():
         ]))
         elements.append(t)
 
-        motor_hist = df[df["motor_id"] == device_id].sort_values("timestamp").tail(30)
-
         chart_configs = [
             ("temperature", "Temperature", motor_hist["Temperature"], "#f97316"),
             ("vibration", "Vibration RMS", [get_vibration_rms(r) for _, r in motor_hist.iterrows()], "#a855f7"),
             ("voltage", "Voltage Avg", [get_avg_voltage(r) for _, r in motor_hist.iterrows()], "#38bdf8"),
             ("current", "Current Avg", [get_avg_current(r) for _, r in motor_hist.iterrows()], "#eab308"),
             ("rpm", "Rotational Speed", motor_hist["Rotational_Speed"], "#22c55e"),
+            ("freq", "Frequency", motor_hist["Frequency"], "#8b5cf6"),
+            ("pf", "Power Factor", motor_hist["Power_Factor"], "#64748b"),
         ]
+
+        # Buat daftar jam untuk sumbu X
+        time_labels = motor_hist["timestamp"].dt.strftime("%H:%M").tolist()
 
         for field_key, field_label, series, color in chart_configs:
             if not motor_hist.empty and field_key in selected_fields:
-                fig, ax = plt.subplots(figsize=(6, 2.2))
-                ax.plot(range(len(motor_hist)), series, color=color)
+                fig, ax = plt.subplots(figsize=(6, 2.5))
+                ax.plot(time_labels, series, color=color)
                 ax.set_title(f"{device_id} - {field_label} Trend", fontsize=9)
-                ax.set_xticks([])
+                
+                # Ubah rotation menjadi 0 agar teks lurus (horizontal)
+                ax.tick_params(axis='x', rotation=0, labelsize=7)
+                
+                # Sembunyikan sebagian label agar tidak tumpang tindih
+                for i, label in enumerate(ax.xaxis.get_ticklabels()):
+                    if i % 5 != 0:
+                        label.set_visible(False)
+
                 img_buf = io.BytesIO()
                 plt.tight_layout()
                 fig.savefig(img_buf, format="png", dpi=120)
