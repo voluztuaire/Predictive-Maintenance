@@ -199,6 +199,32 @@ body{background-color:var(--bg-main);color:var(--text-main);height:100vh;overflo
 .recommendation-box i{color:var(--primary-orange);margin-top:2px}
 .recommendation-box p{font-size:11px;color:var(--text-muted);line-height:1.5}
 
+/* Sub-tabs for Master Data */
+.subtab-bar { display: flex; gap: 10px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px; }
+.btn-subtab {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-muted);
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+}
+.btn-subtab:hover {
+    background: var(--glass-bg-hover);
+    color: var(--text-main);
+}
+.btn-subtab.active {
+    background: var(--primary-orange);
+    color: #fff;
+    border-color: var(--primary-orange);
+    box-shadow: 0 4px 12px rgba(249, 115, 22, 0.3);
+}
+
 /* Summary cards */
 .summary-cards{display:grid;grid-template-columns:repeat(5,1fr);gap:var(--gap-lg)}
 .summary-card{position:relative;overflow:hidden}

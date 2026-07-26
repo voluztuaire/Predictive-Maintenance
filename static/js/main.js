@@ -733,7 +733,7 @@ function switchTab(tabName, navEl) {
         if (target) target.classList.add('active');
     }
 
-    const pages = ['dashboard', 'forecast', 'assets', 'sensors', 'alerts', 'condition', 'training', 'settings'];
+    const pages = ['dashboard', 'forecast', 'assets', 'sensors', 'alerts', 'condition', 'training', 'masterdata', 'settings'];
     pages.forEach(page => {
         const el = document.getElementById('page-' + page);
         if (el) el.style.display = (page === tabName) ? 'flex' : 'none';
@@ -742,6 +742,7 @@ function switchTab(tabName, navEl) {
     if (tabName === 'forecast') { loadForecastComparePage(); }
     if (tabName === 'condition') { loadConditionAlerts(); }
     if (tabName === 'training') { loadReviewQueue(); loadModelHistory(); loadPendingTrainingData(); }
+    if (tabName === 'masterdata') { switchMasterSubTab(currentMasterSubTab || 'fault-types'); }
     if (tabName === 'settings') { loadAlarmRules(); }
 }
 
@@ -1893,3 +1894,225 @@ function saveAllAlarmRules() {
             console.error('Error saving alarm rules:', err);
         });
 }
+
+/* ============================================================
+   MASTER DATA MANAGEMENT (Fault Types, Conditions, Thresholds)
+   ============================================================ */
+
+let currentMasterSubTab = 'fault-types';
+let masterFaultTypesCache = null;
+let masterConditionsCache = null;
+
+function switchMasterSubTab(subTabName) {
+    currentMasterSubTab = subTabName;
+    ['fault-types', 'condition-levels', 'alarm-rules'].forEach(name => {
+        const btn = document.getElementById('btn-subtab-' + name);
+        const panel = document.getElementById('subtab-panel-' + name);
+        if (btn) btn.classList.toggle('active', name === subTabName);
+        if (panel) panel.style.display = (name === subTabName) ? 'block' : 'none';
+    });
+
+    if (subTabName === 'fault-types') {
+        loadFaultTypes();
+    } else if (subTabName === 'condition-levels') {
+        loadConditionLevels();
+    } else if (subTabName === 'alarm-rules') {
+        loadAlarmRules();
+    }
+}
+
+// ------------------------------------------------------------
+// 1. FAULT TYPES CRUD
+// ------------------------------------------------------------
+function loadFaultTypes() {
+    fetch('/api/master/fault-types')
+        .then(r => r.json())
+        .then(data => {
+            masterFaultTypesCache = data;
+            const body = document.getElementById('fault-types-body');
+            if (!body) return;
+            body.innerHTML = '';
+            data.forEach(item => appendFaultTypeRow(item));
+        })
+        .catch(err => console.error('Error loading fault types:', err));
+}
+
+function appendFaultTypeRow(item = {}) {
+    const body = document.getElementById('fault-types-body');
+    if (!body) return;
+    const tr = document.createElement('tr');
+    tr.dataset.id = item.id || '';
+    tr.innerHTML = `
+        <td><input type="text" class="setting-input ft-name" value="${item.name || ''}" placeholder="Fault Name"></td>
+        <td><input type="text" class="setting-input ft-desc" value="${item.description || ''}" placeholder="Description"></td>
+        <td><input type="text" class="setting-input ft-action" value="${item.recommended_action || ''}" placeholder="Recommended action"></td>
+        <td style="text-align:center;">
+            <div style="display:flex; gap:6px; justify-content:center;">
+                <button class="btn-icon" title="Save" onclick="saveFaultType(this)"><i class="fa-solid fa-floppy-disk" style="color:var(--accent-cyan);"></i></button>
+                <button class="btn-icon" title="Delete" onclick="deleteFaultType('${item.id || ''}', this)"><i class="fa-solid fa-trash" style="color:var(--danger);"></i></button>
+            </div>
+        </td>
+    `;
+    body.appendChild(tr);
+}
+
+function addFaultTypeRow() {
+    appendFaultTypeRow({ name: '', description: '', recommended_action: '' });
+}
+
+function saveFaultType(btnEl) {
+    const tr = btnEl.closest('tr');
+    const id = tr.dataset.id;
+    const name = tr.querySelector('.ft-name').value.trim();
+    const description = tr.querySelector('.ft-desc').value.trim();
+    const recommended_action = tr.querySelector('.ft-action').value.trim();
+
+    if (!name) {
+        showModal({ type: 'warning', title: 'Invalid Input', message: 'Fault Type name cannot be empty.', buttonText: 'OK' });
+        return;
+    }
+
+    const payload = { name, description, recommended_action };
+    const url = id ? `/api/master/fault-types/${id}` : '/api/master/fault-types';
+    const method = id ? 'PUT' : 'POST';
+
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            showModal({ type: 'warning', title: 'Save Failed', message: data.error, buttonText: 'OK' });
+        } else {
+            showModal({ type: 'info', title: 'Success', message: 'Fault Type saved successfully!', buttonText: 'OK' });
+            loadFaultTypes();
+        }
+    })
+    .catch(err => console.error('Error saving fault type:', err));
+}
+
+function deleteFaultType(id, btnEl) {
+    if (!id) {
+        btnEl.closest('tr').remove();
+        return;
+    }
+
+    if (!confirm('Are you sure you want to delete this Fault Type?')) return;
+
+    fetch(`/api/master/fault-types/${id}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                showModal({ type: 'warning', title: 'Delete Failed', message: data.error, buttonText: 'OK' });
+            } else {
+                loadFaultTypes();
+            }
+        })
+        .catch(err => console.error('Error deleting fault type:', err));
+}
+
+// ------------------------------------------------------------
+// 2. CONDITION LEVELS CRUD
+// ------------------------------------------------------------
+function loadConditionLevels() {
+    fetch('/api/master/conditions')
+        .then(r => r.json())
+        .then(data => {
+            masterConditionsCache = data;
+            const body = document.getElementById('conditions-body');
+            if (!body) return;
+            body.innerHTML = '';
+            data.forEach(item => appendConditionRow(item));
+        })
+        .catch(err => console.error('Error loading condition levels:', err));
+}
+
+function appendConditionRow(item = {}) {
+    const body = document.getElementById('conditions-body');
+    if (!body) return;
+    const tr = document.createElement('tr');
+    tr.dataset.id = item.id || '';
+    tr.innerHTML = `
+        <td><input type="text" class="setting-input cond-name" value="${item.name || ''}" placeholder="Condition Name"></td>
+        <td>
+            <input type="number" class="setting-input cond-severity" value="${item.severity_level || 1}" min="1" max="10">
+        </td>
+        <td>
+            <div style="display:flex; align-items:center; gap:8px;">
+                <select class="setting-input cond-color" style="flex:1;">
+                    <option value="green" ${item.color_code === 'green' ? 'selected' : ''}>Green (Safe / Normal)</option>
+                    <option value="yellow" ${item.color_code === 'yellow' ? 'selected' : ''}>Yellow (Warning)</option>
+                    <option value="orange" ${item.color_code === 'orange' ? 'selected' : ''}>Orange (Critical)</option>
+                    <option value="red" ${item.color_code === 'red' ? 'selected' : ''}>Red (Failure)</option>
+                    <option value="blue" ${item.color_code === 'blue' ? 'selected' : ''}>Blue (Info / Watch)</option>
+                </select>
+            </div>
+        </td>
+        <td style="text-align:center;">
+            <div style="display:flex; gap:6px; justify-content:center;">
+                <button class="btn-icon" title="Save" onclick="saveConditionLevel(this)"><i class="fa-solid fa-floppy-disk" style="color:var(--accent-cyan);"></i></button>
+                <button class="btn-icon" title="Delete" onclick="deleteConditionLevel('${item.id || ''}', this)"><i class="fa-solid fa-trash" style="color:var(--danger);"></i></button>
+            </div>
+        </td>
+    `;
+    body.appendChild(tr);
+}
+
+function addConditionRow() {
+    appendConditionRow({ name: '', severity_level: 1, color_code: 'green' });
+}
+
+function saveConditionLevel(btnEl) {
+    const tr = btnEl.closest('tr');
+    const id = tr.dataset.id;
+    const name = tr.querySelector('.cond-name').value.trim();
+    const severity_level = parseInt(tr.querySelector('.cond-severity').value) || 1;
+    const color_code = tr.querySelector('.cond-color').value;
+
+    if (!name) {
+        showModal({ type: 'warning', title: 'Invalid Input', message: 'Condition Name cannot be empty.', buttonText: 'OK' });
+        return;
+    }
+
+    const payload = { name, severity_level, color_code };
+    const url = id ? `/api/master/conditions/${id}` : '/api/master/conditions';
+    const method = id ? 'PUT' : 'POST';
+
+    fetch(url, {
+        method: method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.error) {
+            showModal({ type: 'warning', title: 'Save Failed', message: data.error, buttonText: 'OK' });
+        } else {
+            showModal({ type: 'info', title: 'Success', message: 'Condition Level saved successfully!', buttonText: 'OK' });
+            loadConditionLevels();
+        }
+    })
+    .catch(err => console.error('Error saving condition level:', err));
+}
+
+function deleteConditionLevel(id, btnEl) {
+    if (!id) {
+        btnEl.closest('tr').remove();
+        return;
+    }
+
+    if (!confirm('Are you sure you want to delete this Condition Level?')) return;
+
+    fetch(`/api/master/conditions/${id}`, { method: 'DELETE' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                showModal({ type: 'warning', title: 'Delete Failed', message: data.error, buttonText: 'OK' });
+            } else {
+                loadConditionLevels();
+            }
+        })
+        .catch(err => console.error('Error deleting condition level:', err));
+}
