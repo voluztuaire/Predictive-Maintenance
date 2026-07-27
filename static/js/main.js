@@ -555,16 +555,22 @@ function fetchAndRenderAlerts() {
 
     fetch(url)
         .then(response => response.json())
-        .then(alerts => {
+        .then(data => {
             const container = document.getElementById('alert-list');
             container.innerHTML = '';
-            alerts.forEach(a => {
+            const alertsList = Array.isArray(data) ? data : (data.alerts || []);
+            alertsList.forEach(a => {
+                const recHtml = a.recommendation ? `<div class="alert-recommendation" style="font-size:12px; color:var(--text-muted); margin-top:6px; background:rgba(249,115,22,0.08); padding:6px 10px; border-radius:6px; border-left:3px solid var(--primary-orange);"><i class="fa-solid fa-wrench" style="margin-right:6px; color:var(--primary-orange);"></i><strong>Recommended Action:</strong> ${a.recommendation}</div>` : '';
                 const row = document.createElement('div');
                 row.className = 'alert-row';
                 row.innerHTML = `
                     <div class="alert-info">
                         <div class="icon-box ${a.type}"><i class="fa-solid ${a.icon}"></i></div>
-                        <div><h4>${a.title}</h4><p>${a.description}</p></div>
+                        <div>
+                            <h4>${a.title}</h4>
+                            <p>${a.description}</p>
+                            ${recHtml}
+                        </div>
                     </div>
                     <div class="alert-action">
                         <span class="time">${a.time}</span>
@@ -1349,6 +1355,7 @@ function loadConditionAlerts() {
             }
 
             data.alerts.forEach(a => {
+                const paramText = a.parameter ? `${a.parameter}` : `${a.condition_label}`;
                 const violList = a.violations.map(v =>
                     `<span class="severity-tag ${v.tier}">${v.parameter}: ${v.actual_value} (thr ${v.threshold})</span>`
                 ).join(' ');
@@ -1357,19 +1364,18 @@ function loadConditionAlerts() {
                 row.className = 'log-row';
                 row.innerHTML = `
                     <div class="log-info">
-                        <div class="icon-box ${a.status_color === 'red' ? 'critical' : a.status_color === 'orange' ? 'warning' : 'info'}">
+                        <div class="icon-box ${a.tier === 'failure' || a.status_color === 'red' ? 'critical' : a.tier === 'critical' || a.status_color === 'orange' ? 'warning' : 'info'}">
                             <i class="fa-solid fa-gauge-high"></i>
                         </div>
                         <div>
-                            <h4>${a.condition_label} — ${a.motor_id}</h4>
+                            <h4>${paramText} — ${a.motor_id}</h4>
                             <div class="viol-list-wrapper">${violList}</div>
                             <div class="log-meta">${a.timestamp}</div>
                         </div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
-                    <span class="severity-tag ${a.condition_label.toLowerCase()}">${a.total_violations} violation(s)</span>
-                            <!-- Tombol baru di bawah ini -->
-                            <button class="btn-action" onclick="submitForReview('${a.motor_id}', '${a.timestamp}')">Submit for Review</button>
+                        <span class="severity-tag ${(a.tier || a.condition_label).toLowerCase()}">${a.tier ? a.tier.toUpperCase() : `${a.total_violations} violation(s)`}</span>
+                        <button class="btn-action" onclick="submitForReview('${a.motor_id}', '${a.timestamp}', '${a.parameter || ''}')">Submit for Review</button>
                     </div>                
                 `;
                 container.appendChild(row);
@@ -1378,18 +1384,18 @@ function loadConditionAlerts() {
         .catch(err => console.error('Error loading condition alerts:', err));
 }
 
-function submitForReview(deviceId, timestamp) {
+function submitForReview(deviceId, timestamp, parameter) {
     fetch(`/api/expert-review/submit`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ device: deviceId, timestamp: timestamp })
+        body: JSON.stringify({ device: deviceId, timestamp: timestamp, parameter: parameter })
     })
         .then(r => r.json())
         .then(data => {
             if (data.error) {
                 showModal({ type: 'warning', title: 'Cannot Submit', message: data.error, buttonText: 'OK' });
             } else {
-                showModal({ type: 'success', title: 'Submitted', message: `${deviceId} added to expert review queue.`, buttonText: 'OK' });
+                showModal({ type: 'success', title: 'Submitted', message: `${deviceId}${parameter ? ` (${parameter})` : ''} added to expert review queue.`, buttonText: 'OK' });
                 loadConditionAlerts();
             }
         })

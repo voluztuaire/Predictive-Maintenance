@@ -902,19 +902,28 @@ def api_threshold_alerts():
     device_id = request.args.get("device")
     alerts = []
 
-    def check_and_add(mid, res):
+    motors_to_check = [device_id] if device_id else ALL_MOTOR_IDS
+    for mid in motors_to_check:
+        row = get_row_for_device(mid)
+        res = get_threshold_alerts(row)
         if res["is_labeling_candidate"]:
-            alerts.append(res)
-
-    if device_id:
-        row = get_row_for_device(device_id)
-        result = get_threshold_alerts(row)
-        check_and_add(device_id, result)
-    else:
-        for mid in ALL_MOTOR_IDS:
-            row = get_row_for_device(mid)
-            result = get_threshold_alerts(row)
-            check_and_add(mid, result)
+            for v in res["violations"]:
+                alerts.append({
+                    "alert_id": f"ALT-{mid}-{v['parameter']}-{res['timestamp']}",
+                    "motor_id": mid,
+                    "timestamp": res["timestamp"],
+                    "condition_label": res["condition_label"],
+                    "status_color": res["status_color"],
+                    "parameter": v["parameter"],
+                    "tier": v["tier"],
+                    "actual_value": v["actual_value"],
+                    "threshold": v["threshold"],
+                    "violations": [v],
+                    "total_violations": 1,
+                    "is_labeling_candidate": True,
+                    "source": "threshold_rule",
+                    "sensor_data": res["sensor_data"]
+                })
 
     return jsonify({"count": len(alerts), "alerts": alerts})
 
@@ -924,15 +933,17 @@ def api_submit_review():
     payload = request.get_json() or {}
     device_id = payload.get("device") or request.args.get("device", ALL_MOTOR_IDS[0])
     timestamp = payload.get("timestamp")
+    parameter = payload.get("parameter")
 
-    # Cegah duplicate: kalau anomali pada motor & timestamp persis sama sudah ada di antrian pending, baru cegah
+    pending_items = list_reviews(status="pending", motor_id=device_id)
     if timestamp:
-        existing = [r for r in list_reviews(status="pending", motor_id=device_id) if str(r.timestamp) == str(timestamp)]
-    else:
-        existing = list_reviews(status="pending", motor_id=device_id)
+        pending_items = [r for r in pending_items if str(r.timestamp) == str(timestamp)]
+    if parameter:
+        pending_items = [r for r in pending_items if r.threshold_alert and r.threshold_alert.get("parameter") == parameter]
 
-    if existing:
-        return jsonify({"error": f"{device_id} (timestamp: {timestamp or 'latest'}) is already in the pending review queue."}), 400
+    if pending_items:
+        param_label = f" ({parameter})" if parameter else ""
+        return jsonify({"error": f"{device_id}{param_label} is already in the pending review queue."}), 400
 
     if timestamp:
         motor_df = df[(df["motor_id"] == device_id) & (df["timestamp"].astype(str) == str(timestamp))]
@@ -946,9 +957,18 @@ def api_submit_review():
     alert = get_threshold_alerts(row)
     if not alert["is_labeling_candidate"]:
         return jsonify({"error": "Motor is currently Normal, nothing to review."}), 400
+
+    if parameter:
+        matching_viols = [v for v in alert["violations"] if v["parameter"] == parameter]
+        if matching_viols:
+            alert["violations"] = matching_viols
+            alert["parameter"] = parameter
+            alert["tier"] = matching_viols[0]["tier"]
+
     sensor_data = row[SN_SENSOR_COLS].to_dict()
     review = submit_for_review(alert, sensor_data)
     return jsonify(review.to_dict())
+
 
 
 
@@ -1099,6 +1119,7 @@ def get_alerts():
                 "icon": "fa-temperature-high",
                 "title": f"Critical Pattern Detected on {device_id_str}",
                 "description": f"{fault}: {prediction['probable_cause']}",
+                "recommendation": prediction.get("recommendation", ""),
                 "time": "Just now",
                 "action": "Investigate",
                 "device_id": device_id_str
@@ -1109,6 +1130,7 @@ def get_alerts():
                 "icon": "fa-circle-exclamation",
                 "title": f"Failure Risk on {device_id_str}",
                 "description": f"{fault}: {prediction['probable_cause']}",
+                "recommendation": prediction.get("recommendation", ""),
                 "time": "Just now",
                 "action": "Investigate",
                 "device_id": device_id_str
@@ -1119,6 +1141,7 @@ def get_alerts():
                 "icon": "fa-chart-line",
                 "title": f"Early Degradation Signs on {device_id_str}",
                 "description": f"{fault}: {prediction['probable_cause']}",
+                "recommendation": prediction.get("recommendation", ""),
                 "time": "Just now",
                 "action": "View Plan",
                 "device_id": device_id_str
@@ -1130,12 +1153,13 @@ def get_alerts():
             "icon": "fa-shield",
             "title": f"{device_id} Normal" if device_id else "All Motors Normal",
             "description": "No degradation patterns detected." if device_id else "No degradation patterns detected across monitored motors.",
+            "recommendation": "Normal condition, continue routine monitoring.",
             "time": "Just now",
             "action": None,
-            "device_id": None
+            "device_id": device_id or ""
         })
 
-    return jsonify(alerts[:20])
+    return jsonify({"count": len(alerts), "alerts": alerts})
 
 @app.route("/api/notifications")
 @login_required
@@ -1194,10 +1218,11 @@ def get_sensors():
 
     for row in rows:
         prediction = predict_row_cached(str(row["motor_id"]), row)
-        status = SENSOR_STATUS_MAP.get(prediction["condition_label"], "Normal")
+        label = prediction["condition_label"]
+        status = SENSOR_STATUS_MAP.get(label, "Normal")
 
         readings.append({
-            "motor_id": str(row["motor_id"]),
+            "device_id": str(row["motor_id"]),
             "motor_name": f"Induction Motor {row['motor_id']}",
             "temperature": float(row["Temperature"]),
             "vibration": get_vibration_rms(row),
@@ -1258,6 +1283,7 @@ def get_logs():
             "icon": icon_map.get(label, "fa-shield"),
             "title": title_map.get(label, "Status Update"),
             "description": f"Fault: {fault}. RUL: {int(prediction['rul_hours'])} hours. {prediction['probable_cause']}",
+            "recommendation": prediction.get("recommendation", ""),
             "device": f"Induction Motor {row['motor_id']}",
             "device_id": str(row["motor_id"]),
             "time": row["timestamp"].strftime("%Y-%m-%d %H:%M")
