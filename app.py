@@ -588,7 +588,9 @@ def predict_row_cached(motor_id, row):
     cache_key = (motor_id, idx)
     
     if cache_key in _prediction_cache:
-        return _prediction_cache[cache_key]
+        cached = _prediction_cache[cache_key]
+        if "recommendation" in cached:
+            return cached
         
     result = predict_row(row)
     _prediction_cache[cache_key] = result

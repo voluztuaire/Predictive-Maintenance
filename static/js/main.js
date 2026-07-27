@@ -7,33 +7,47 @@ let expandedParam = null;
 let fullSparkCharts = {};
 
 const PARAM_DETAIL_CONFIG = {
-    temp: { title: 'Temperature', fields: [
-        { key: 'temperature', label: 'Temperature', color: '#f97316' }
-    ], thresholdParams: ['Temperature'] },
-    vib: { title: 'Vibration', fields: [
-        { key: 'vibration_x', label: 'X', color: '#a855f7' },
-        { key: 'vibration_y', label: 'Y', color: '#9333ea' },
-        { key: 'vibration_z', label: 'Z', color: '#7e22ce' }
-    ], thresholdParams: ['Vibration_X', 'Vibration_Y', 'Vibration_Z'] },
-    volt: { title: 'Voltage', fields: [
-        { key: 'voltage_l1', label: 'L1', color: '#38bdf8' },
-        { key: 'voltage_l2', label: 'L2', color: '#0ea5e9' },
-        { key: 'voltage_l3', label: 'L3', color: '#0369a1' }
-    ], thresholdParams: ['Voltage_L1', 'Voltage_L2', 'Voltage_L3'] },
-    current: { title: 'Current', fields: [
-        { key: 'current_l1', label: 'L1', color: '#eab308' },
-        { key: 'current_l2', label: 'L2', color: '#ca8a04' },
-        { key: 'current_l3', label: 'L3', color: '#a16207' }
-    ], thresholdParams: ['Current_L1', 'Current_L2', 'Current_L3'] },
-    rpm: { title: 'Rotational Speed', fields: [
-        { key: 'rpm', label: 'RPM', color: '#22c55e' }
-    ], thresholdParams: ['Rotational_Speed'] },
-    freq: { title: 'Frequency', fields: [
-        { key: 'frequency', label: 'Frequency (Hz)', color: '#8b5cf6' }
-    ], thresholdParams: ['Frequency'] },
-    pf: { title: 'Power Factor', fields: [
-        { key: 'power_factor', label: 'Power Factor', color: '#64748b' }
-    ], thresholdParams: ['Power_Factor'] }
+    temp: {
+        title: 'Temperature', fields: [
+            { key: 'temperature', label: 'Temperature', color: '#f97316' }
+        ], thresholdParams: ['Temperature']
+    },
+    vib: {
+        title: 'Vibration', fields: [
+            { key: 'vibration_x', label: 'X', color: '#a855f7' },
+            { key: 'vibration_y', label: 'Y', color: '#9333ea' },
+            { key: 'vibration_z', label: 'Z', color: '#7e22ce' }
+        ], thresholdParams: ['Vibration_X', 'Vibration_Y', 'Vibration_Z']
+    },
+    volt: {
+        title: 'Voltage', fields: [
+            { key: 'voltage_l1', label: 'L1', color: '#38bdf8' },
+            { key: 'voltage_l2', label: 'L2', color: '#0ea5e9' },
+            { key: 'voltage_l3', label: 'L3', color: '#0369a1' }
+        ], thresholdParams: ['Voltage_L1', 'Voltage_L2', 'Voltage_L3']
+    },
+    current: {
+        title: 'Current', fields: [
+            { key: 'current_l1', label: 'L1', color: '#eab308' },
+            { key: 'current_l2', label: 'L2', color: '#ca8a04' },
+            { key: 'current_l3', label: 'L3', color: '#a16207' }
+        ], thresholdParams: ['Current_L1', 'Current_L2', 'Current_L3']
+    },
+    rpm: {
+        title: 'Rotational Speed', fields: [
+            { key: 'rpm', label: 'RPM', color: '#22c55e' }
+        ], thresholdParams: ['Rotational_Speed']
+    },
+    freq: {
+        title: 'Frequency', fields: [
+            { key: 'frequency', label: 'Frequency (Hz)', color: '#8b5cf6' }
+        ], thresholdParams: ['Frequency']
+    },
+    pf: {
+        title: 'Power Factor', fields: [
+            { key: 'power_factor', label: 'Power Factor', color: '#64748b' }
+        ], thresholdParams: ['Power_Factor']
+    }
 };
 
 let alarmRulesCache = null;
@@ -82,7 +96,7 @@ function initTheme() {
     if (savedTheme === 'light') {
         document.body.classList.add('light-mode');
         const icon = document.getElementById('theme-icon');
-        if(icon) icon.classList.replace('fa-sun', 'fa-moon');
+        if (icon) icon.classList.replace('fa-sun', 'fa-moon');
     }
 }
 
@@ -92,10 +106,10 @@ function toggleTheme() {
     body.classList.toggle('light-mode');
     if (body.classList.contains('light-mode')) {
         localStorage.setItem('theme', 'light');
-        if(icon) icon.classList.replace('fa-sun', 'fa-moon');
+        if (icon) icon.classList.replace('fa-sun', 'fa-moon');
     } else {
         localStorage.setItem('theme', 'dark');
-        if(icon) icon.classList.replace('fa-moon', 'fa-sun');
+        if (icon) icon.classList.replace('fa-moon', 'fa-sun');
     }
     updateChartsTheme();
 }
@@ -115,27 +129,27 @@ function updateChartsTheme() {
     const textColor = getChartColors().textColor;
 
     if (sensorChartInstance) {
-        if(sensorChartInstance.options.plugins && sensorChartInstance.options.plugins.legend) {
+        if (sensorChartInstance.options.plugins && sensorChartInstance.options.plugins.legend) {
             sensorChartInstance.options.plugins.legend.labels.color = textColor;
         }
-        if(sensorChartInstance.options.scales.yTemp) {
+        if (sensorChartInstance.options.scales.yTemp) {
             sensorChartInstance.options.scales.yTemp.grid.color = gridColor;
         }
-        if(sensorChartInstance.options.scales.x) {
+        if (sensorChartInstance.options.scales.x) {
             sensorChartInstance.options.scales.x.grid.color = gridColor;
             sensorChartInstance.options.scales.x.ticks.color = textColor;
         }
         sensorChartInstance.update();
     }
     if (sensorChartFullInstance) {
-        if(sensorChartFullInstance.options.plugins && sensorChartFullInstance.options.plugins.legend) {
+        if (sensorChartFullInstance.options.plugins && sensorChartFullInstance.options.plugins.legend) {
             sensorChartFullInstance.options.plugins.legend.labels.color = textColor;
         }
-        if(sensorChartFullInstance.options.scales.y) {
+        if (sensorChartFullInstance.options.scales.y) {
             sensorChartFullInstance.options.scales.y.grid.color = gridColor;
             sensorChartFullInstance.options.scales.y.ticks.color = textColor;
         }
-        if(sensorChartFullInstance.options.scales.x) {
+        if (sensorChartFullInstance.options.scales.x) {
             sensorChartFullInstance.options.scales.x.grid.color = gridColor;
             sensorChartFullInstance.options.scales.x.ticks.color = textColor;
         }
@@ -200,12 +214,12 @@ function showModal(options) {
         cancelBtn.style.display = 'flex';
         confirmBtn.textContent = options.confirmText || 'Confirm';
         cancelBtn.textContent = options.cancelText || 'Cancel';
-        
+
         const newConfirm = confirmBtn.cloneNode(true);
         const newCancel = cancelBtn.cloneNode(true);
         confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
         cancelBtn.parentNode.replaceChild(newCancel, cancelBtn);
-        
+
         newConfirm.addEventListener('click', () => {
             closeModal();
             if (options.onConfirm) options.onConfirm();
@@ -218,10 +232,10 @@ function showModal(options) {
         confirmBtn.style.display = 'flex';
         cancelBtn.style.display = 'none';
         confirmBtn.textContent = options.buttonText || 'OK';
-        
+
         const newConfirm = confirmBtn.cloneNode(true);
         confirmBtn.parentNode.replaceChild(newConfirm, confirmBtn);
-        
+
         newConfirm.addEventListener('click', () => {
             closeModal();
             if (options.onClose) options.onClose();
@@ -235,10 +249,10 @@ function closeModal() {
     document.getElementById('custom-modal').classList.remove('open');
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     const modal = document.getElementById('custom-modal');
     if (modal) {
-        modal.addEventListener('click', function(e) {
+        modal.addEventListener('click', function (e) {
             if (e.target === this) {
                 closeModal();
             }
@@ -246,7 +260,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 });
 
-document.addEventListener('keydown', function(e) {
+document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
         closeModal();
     }
@@ -470,12 +484,12 @@ function fetchAndUpdateMetrics() {
             // Update risk gauge rotation
             const riskDeg = Math.round((data.failure_probability / 100) * 360);
             document.getElementById('risk-gauge').style.setProperty('--risk-deg', `${riskDeg}deg`);
-            
+
             // Degradation list
             if (data.degradation_list) {
                 const degList = document.getElementById('val-degradation-list');
                 if (degList) {
-                    degList.innerHTML = data.degradation_list.map((d, i) => 
+                    degList.innerHTML = data.degradation_list.map((d, i) =>
                         `<li><span class="dot ${i === 0 ? 'primary' : 'secondary'}"></span> ${d.label} <span class="dot-value">${d.value}</span></li>`
                     ).join('');
                 }
@@ -514,7 +528,7 @@ function fetchAndUpdateMetrics() {
 
             const healthNote = document.getElementById('val-health-note');
             const healthIcon = document.querySelector('.kpi-icon.health');
-            
+
             // Clear any inline styles from previous states
             healthNote.style.color = '';
             if (healthIcon) {
@@ -544,7 +558,7 @@ function fetchAndUpdateMetrics() {
             currentDevice = data.device;
             loadSparklines();
             initChart();
-            
+
             if (expandedParam) renderFullSpark(expandedParam);
         })
         .catch(error => console.error('Error updating status:', error));
@@ -560,7 +574,8 @@ function fetchAndRenderAlerts() {
             container.innerHTML = '';
             const alertsList = Array.isArray(data) ? data : (data.alerts || []);
             alertsList.forEach(a => {
-                const recHtml = a.recommendation ? `<div class="alert-recommendation" style="font-size:12px; color:var(--text-muted); margin-top:6px; background:rgba(249,115,22,0.08); padding:6px 10px; border-radius:6px; border-left:3px solid var(--primary-orange);"><i class="fa-solid fa-wrench" style="margin-right:6px; color:var(--primary-orange);"></i><strong>Recommended Action:</strong> ${a.recommendation}</div>` : '';
+                const recText = a.recommendation || 'Inspect motor and check operating parameters';
+                const recHtml = `<div class="alert-recommendation" style="margin-top: 8px; color: #f97316; font-size: 12px; font-weight: 500;"><strong>Action:</strong> ${recText}</div>`;
                 const row = document.createElement('div');
                 row.className = 'alert-row';
                 row.innerHTML = `
@@ -711,6 +726,8 @@ function renderLogsList() {
     }
 
     filtered.forEach(l => {
+        const recText = l.recommendation || 'Inspect motor and check operating parameters';
+        const recHtml = `<div class="alert-recommendation" style="margin-top: 8px; color: #f97316; font-size: 12px; font-weight: 500;"><strong>Action:</strong> ${recText}</div>`;
         const row = document.createElement('div');
         row.className = 'log-row';
         row.innerHTML = `
@@ -719,6 +736,7 @@ function renderLogsList() {
                 <div>
                     <h4>${l.title}</h4>
                     <p>${l.description}</p>
+                    ${recHtml}
                     <div class="log-meta">${l.device} - ${l.time}</div>
                 </div>
             </div>
@@ -856,15 +874,15 @@ let sparklineCharts = {};
 function renderSparkline(canvasId, labels, data, color) {
     const canvas = document.getElementById(canvasId);
     if (!canvas) return;
-    
+
     if (sparklineCharts[canvasId]) {
         const chart = sparklineCharts[canvasId];
         chart.data.labels = labels;
         chart.data.datasets[0].data = data;
-        chart.update('none'); 
+        chart.update('none');
         return;
     }
-    
+
     const ctx = canvas.getContext('2d');
     sparklineCharts[canvasId] = new Chart(ctx, {
         type: 'line',
@@ -956,7 +974,7 @@ function updateMotorCount() {
     if (totalEl) totalEl.textContent = `Total: ${total} motors`;
 }
 
-document.addEventListener('change', function(e) {
+document.addEventListener('change', function (e) {
     if (e.target.classList.contains('round-check') && e.target.closest('.motor-picker-item')) {
         updateMotorItemStyle(e.target);
         updateMotorCount();
@@ -967,7 +985,7 @@ function submitReport() {
     const btn = document.getElementById('report-generate-btn');
     const btnText = document.getElementById('report-btn-text');
     const spinner = document.getElementById('report-btn-spinner');
-    
+
     const motors = Array.from(document.querySelectorAll('.report-motor-check:checked')).map(cb => cb.value);
     const fields = Array.from(document.querySelectorAll('.report-field:checked')).map(cb => cb.value);
     const includePredictions = document.getElementById('report-predictions').checked;
@@ -1000,40 +1018,40 @@ function submitReport() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ motors, fields, include_predictions: includePredictions })
     })
-    .then(r => {
-        if (!r.ok) {
-            throw new Error('Failed to generate report');
-        }
-        return r.blob();
-    })
-    .then(blob => {
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'winteq_maintenance_report.pdf';
-        a.click();
-        closeReportModal();
-        showModal({
-            type: 'success',
-            title: 'Report Generated',
-            message: 'PDF report has been downloaded successfully.',
-            buttonText: 'OK'
+        .then(r => {
+            if (!r.ok) {
+                throw new Error('Failed to generate report');
+            }
+            return r.blob();
+        })
+        .then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'winteq_maintenance_report.pdf';
+            a.click();
+            closeReportModal();
+            showModal({
+                type: 'success',
+                title: 'Report Generated',
+                message: 'PDF report has been downloaded successfully.',
+                buttonText: 'OK'
+            });
+        })
+        .catch(error => {
+            showModal({
+                type: 'error',
+                title: 'Error',
+                message: 'Failed to generate report. Please try again.',
+                buttonText: 'OK'
+            });
+            console.error('Error generating report:', error);
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btnText.style.display = 'inline';
+            spinner.style.display = 'none';
         });
-    })
-    .catch(error => {
-        showModal({
-            type: 'error',
-            title: 'Error',
-            message: 'Failed to generate report. Please try again.',
-            buttonText: 'OK'
-        });
-        console.error('Error generating report:', error);
-    })
-    .finally(() => {
-        btn.disabled = false;
-        btnText.style.display = 'inline';
-        spinner.style.display = 'none';
-    });
 }
 
 let tickCounter = 0;
@@ -1041,9 +1059,9 @@ let tickCounter = 0;
 setInterval(() => {
     tickCounter++;
     fetch('/api/tick', { method: 'POST' }).then(() => {
-        fetchAndUpdateMetrics(); 
-        loadSensors();          
-        
+        fetchAndUpdateMetrics();
+        loadSensors();
+
         if (tickCounter % 3 === 0) {
             loadMotors();
             loadLogs();
@@ -1119,7 +1137,7 @@ let forecastChartInstance = null;
         div.innerHTML = text
             .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*(.*?)\*/g, '<em>$1</em>');
-            
+
         messagesEl.appendChild(div);
         messagesEl.scrollTop = messagesEl.scrollHeight;
         return div;
@@ -1166,7 +1184,7 @@ function combineVibrationRMS(sensors) {
     return sensors.Vibration_X.map((vx, i) => {
         const vy = sensors.Vibration_Y[i];
         const vz = sensors.Vibration_Z[i];
-        return Math.sqrt(vx*vx + vy*vy + vz*vz);
+        return Math.sqrt(vx * vx + vy * vy + vz * vz);
     });
 }
 
@@ -1188,7 +1206,7 @@ function combineCurrentAvg(sensors) {
 
 function loadForecastComparePage() {
     const grid = document.getElementById('forecast-compare-grid');
-    
+
     grid.innerHTML = `
         <div style="text-align: center; padding: 60px 20px; color: var(--primary-orange);">
             <i class="fa-solid fa-circle-notch fa-spin" style="font-size: 32px; margin-bottom: 16px;"></i>
@@ -1259,7 +1277,7 @@ function renderComboChart(canvasId, histLabels, histData, fcstLabels, fcstData, 
 
     // --- FITUR BARU: Plugin Custom untuk Garis "Sekarang" ---
     // Titik "sekarang" ada di index terakhir data historis
-    const currentIndex = histData.length - 1; 
+    const currentIndex = histData.length - 1;
 
     const currentLinePlugin = {
         id: 'currentLine',
@@ -1338,7 +1356,7 @@ function renderComboChart(canvasId, histLabels, histData, fcstLabels, fcstData, 
             }
         },
         // Masukkan plugin custom-nya ke sini
-        plugins: [currentLinePlugin] 
+        plugins: [currentLinePlugin]
     });
 }
 
@@ -1385,7 +1403,7 @@ function loadConditionAlerts() {
 }
 
 function submitForReview(deviceId, timestamp, parameter) {
-    fetch(`/api/expert-review/submit`, { 
+    fetch(`/api/expert-review/submit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ device: deviceId, timestamp: timestamp, parameter: parameter })
@@ -1424,8 +1442,8 @@ function loadReviewQueue() {
                             <h4>${item.motor_id} — ${item.threshold_alert.condition_label}</h4>
                             <div class="viol-list-wrapper">
                                 ${item.threshold_alert.violations.map(v =>
-                                    `<span class="severity-tag ${v.tier}">${v.parameter}: ${v.actual_value} (thr ${v.threshold})</span>`
-                                ).join('')}
+                    `<span class="severity-tag ${v.tier}">${v.parameter}: ${v.actual_value} (thr ${v.threshold})</span>`
+                ).join('')}
                             </div>
                             <div class="log-meta">${item.created_at}</div>
                         </div>
@@ -1471,13 +1489,13 @@ function approveReview(reviewId) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ review_id: reviewId, expert_label: label, expert_fault_type: fault, notes: notes })
     })
-    .then(r => r.json())
-    .then(() => {
-        showModal({ type: 'success', title: 'Approved', message: 'Label saved to training dataset.', buttonText: 'OK' });
-        loadReviewQueue();
-        loadPendingTrainingData();
-    })
-    .catch(err => console.error('Error approving review:', err));
+        .then(r => r.json())
+        .then(() => {
+            showModal({ type: 'success', title: 'Approved', message: 'Label saved to training dataset.', buttonText: 'OK' });
+            loadReviewQueue();
+            loadPendingTrainingData();
+        })
+        .catch(err => console.error('Error approving review:', err));
 }
 
 function rejectReview(reviewId) {
@@ -1486,12 +1504,12 @@ function rejectReview(reviewId) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ review_id: reviewId })
     })
-    .then(r => r.json())
-    .then(() => {
-        showModal({ type: 'info', title: 'Rejected', message: 'Review discarded, not added to training data.', buttonText: 'OK' });
-        loadReviewQueue();
-    })
-    .catch(err => console.error('Error rejecting review:', err));
+        .then(r => r.json())
+        .then(() => {
+            showModal({ type: 'info', title: 'Rejected', message: 'Review discarded, not added to training data.', buttonText: 'OK' });
+            loadReviewQueue();
+        })
+        .catch(err => console.error('Error rejecting review:', err));
 }
 
 function loadPendingTrainingData() {
@@ -1501,13 +1519,13 @@ function loadPendingTrainingData() {
             document.getElementById('pending-count').textContent = data.count;
             const body = document.getElementById('pending-training-body');
             body.innerHTML = '';
-            
+
             // Jika kosong, tampilkan pesan dengan colspan 20 (sesuai jumlah kolom)
             if (data.count === 0) {
                 body.innerHTML = '<tr><td colspan="20" style="text-align:center; padding:20px; color:var(--text-muted);">No approved expert data yet.</td></tr>';
                 return;
             }
-            
+
             data.rows.forEach(r => {
                 const tr = document.createElement('tr');
                 tr.innerHTML = `
@@ -1551,14 +1569,14 @@ function openSnapshotModal(version) {
             const body = document.getElementById('snapshot-table-body');
             head.innerHTML = '';
             body.innerHTML = '';
-            
+
             if (data.rows.length > 0) {
                 const preferredOrder = [
-                    'Timestamp', 'Motor_ID', 
-                    'Voltage_L1', 'Voltage_L2', 'Voltage_L3', 
-                    'Current_L1', 'Current_L2', 'Current_L3', 
-                    'Frequency', 'Power_Factor', 
-                    'Temperature', 'Vibration_X', 'Vibration_Y', 'Vibration_Z', 
+                    'Timestamp', 'Motor_ID',
+                    'Voltage_L1', 'Voltage_L2', 'Voltage_L3',
+                    'Current_L1', 'Current_L2', 'Current_L3',
+                    'Frequency', 'Power_Factor',
+                    'Temperature', 'Vibration_X', 'Vibration_Y', 'Vibration_Z',
                     'Rotational_Speed', 'Motor_State', 'Fault_Type_True'
                 ];
                 const actualKeys = Object.keys(data.rows[0]);
@@ -1577,7 +1595,7 @@ function openSnapshotModal(version) {
 
                 // Show the last 100 rows, reversed (newest first)
                 const displayRows = data.rows.slice().reverse();
-                displayRows.forEach(r => { 
+                displayRows.forEach(r => {
                     const tr = document.createElement('tr');
                     keys.forEach(k => {
                         const td = document.createElement('td');
@@ -1616,22 +1634,22 @@ function triggerRetrain() {
 
 function renderRetrainResult(data, resultBox) {
     const status = data.deployed ? '<span style="color:var(--success);">DEPLOYED</span>' : '<span style="color:var(--danger);">NOT deployed (failed quality gate)</span>';
-    
+
     let confHtml = '';
     if (data.metrics && data.metrics.condition && data.metrics.condition.confusion_matrix) {
         const labels = ['Normal', 'Warning', 'Critical', 'Failure'];
         const matrix = data.metrics.condition.confusion_matrix;
-        
+
         confHtml += '<div class="conf-matrix-wrapper">';
         confHtml += '<h4 style="margin-bottom:8px; color:var(--text-main);">Condition Confusion Matrix (Actual \\ Predicted)</h4>';
         confHtml += '<table class="conf-matrix-table">';
         confHtml += '<thead><tr><th></th>';
         labels.forEach(l => confHtml += `<th>${l}</th>`);
         confHtml += '</tr></thead><tbody>';
-        
-        for(let i=0; i<matrix.length; i++) {
+
+        for (let i = 0; i < matrix.length; i++) {
             confHtml += `<tr><th>${labels[i]}</th>`;
-            for(let j=0; j<matrix[i].length; j++) {
+            for (let j = 0; j < matrix[i].length; j++) {
                 const val = matrix[i][j];
                 let cellClass = 'conf-cell-empty';
                 if (val > 0) {
@@ -1655,7 +1673,7 @@ function renderRetrainResult(data, resultBox) {
         ${confHtml}
     `;
     loadModelHistory();
-    loadPendingTrainingData();   
+    loadPendingTrainingData();
 }
 
 function loadModelHistory() {
@@ -1664,7 +1682,7 @@ function loadModelHistory() {
         .then(data => {
             const list = document.getElementById('model-history-list');
             if (!list) return;
-            
+
             if (data.error) {
                 list.innerHTML = `<tr><td colspan="7" style="text-align:center; color:var(--danger);">${data.error}</td></tr>`;
                 return;
@@ -1722,7 +1740,7 @@ function deployModelVersion(version) {
         type: 'confirm',
         title: 'Deploy Model Version',
         message: `Deploy v${version} as the active model? Other versions (including the current one) remain saved and you can switch back anytime.`,
-        confirmText: 'Deploy', 
+        confirmText: 'Deploy',
         onConfirm: () => {
             fetch(`/api/admin/models/${version}/deploy`, { method: 'POST' })
                 .then(r => r.json())
@@ -1767,8 +1785,8 @@ function appendAlarmRow(rule = {}) {
         <td>
             <select class="setting-input" data-field="parameter">
                 ${AVAILABLE_PARAMETERS.map(p =>
-                    `<option value="${p}" ${rule.parameter === p ? 'selected' : ''}>${p}</option>`
-                ).join('')}
+        `<option value="${p}" ${rule.parameter === p ? 'selected' : ''}>${p}</option>`
+    ).join('')}
             </select>
         </td>
         <td>
@@ -1859,7 +1877,7 @@ function saveAllAlarmRules() {
     rows.forEach(row => {
         const ruleId = row.querySelector('.btn-icon').getAttribute('onclick').match(/deleteRule\('([^']+)'/)[1];
 
-    const payload = {
+        const payload = {
             name: row.querySelector('[data-field="name"]').value,
             parameter: row.querySelector('[data-field="parameter"]').value,
             tier: row.querySelector('[data-field="tier"]').value,
@@ -1987,16 +2005,16 @@ function saveFaultType(btnEl) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) {
-            showModal({ type: 'warning', title: 'Save Failed', message: data.error, buttonText: 'OK' });
-        } else {
-            showModal({ type: 'info', title: 'Success', message: 'Fault Type saved successfully!', buttonText: 'OK' });
-            loadFaultTypes();
-        }
-    })
-    .catch(err => console.error('Error saving fault type:', err));
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                showModal({ type: 'warning', title: 'Save Failed', message: data.error, buttonText: 'OK' });
+            } else {
+                showModal({ type: 'info', title: 'Success', message: 'Fault Type saved successfully!', buttonText: 'OK' });
+                loadFaultTypes();
+            }
+        })
+        .catch(err => console.error('Error saving fault type:', err));
 }
 
 function deleteFaultType(id, btnEl) {
@@ -2091,16 +2109,16 @@ function saveConditionLevel(btnEl) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     })
-    .then(r => r.json())
-    .then(data => {
-        if (data.error) {
-            showModal({ type: 'warning', title: 'Save Failed', message: data.error, buttonText: 'OK' });
-        } else {
-            showModal({ type: 'info', title: 'Success', message: 'Condition Level saved successfully!', buttonText: 'OK' });
-            loadConditionLevels();
-        }
-    })
-    .catch(err => console.error('Error saving condition level:', err));
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                showModal({ type: 'warning', title: 'Save Failed', message: data.error, buttonText: 'OK' });
+            } else {
+                showModal({ type: 'info', title: 'Success', message: 'Condition Level saved successfully!', buttonText: 'OK' });
+                loadConditionLevels();
+            }
+        })
+        .catch(err => console.error('Error saving condition level:', err));
 }
 
 function deleteConditionLevel(id, btnEl) {
@@ -2121,4 +2139,4 @@ function deleteConditionLevel(id, btnEl) {
             }
         })
         .catch(err => console.error('Error deleting condition level:', err));
-}
+}
