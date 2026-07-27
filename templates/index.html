@@ -69,12 +69,13 @@
                 </a>
             </li>
 
-            <li class="nav-item" data-tab="settings" onclick="switchTab('settings', this)">
-                <a href="#settings">
-                    <span class="icon"><i class="fa-solid fa-gear"></i></span>
-                    <span class="text">Settings</span>
+            <li class="nav-item" data-tab="masterdata" onclick="switchTab('masterdata', this)">
+                <a href="#masterdata">
+                    <span class="icon"><i class="fa-solid fa-layer-group"></i></span>
+                    <span class="text">Master Data</span>
                 </a>
             </li>
+
             {% endif %}
         </ul>
 
@@ -615,37 +616,107 @@
                 </div>
             </div>
 
-<!-- SETTINGS (admin only) -->
-            <div class="page-section" id="page-settings" style="display: none;">
-                <div class="settings-grid">
+            <!-- MASTER DATA (admin only) -->
+            <div class="page-section" id="page-masterdata" style="display: none;">
+                <div class="card glass-card" style="margin-bottom: 20px; padding: 16px 20px;">
+                    <div class="subtab-bar" style="display: flex; gap: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 12px;">
+                        <button class="btn-subtab active" id="btn-subtab-fault-types" onclick="switchMasterSubTab('fault-types')">
+                            <i class="fa-solid fa-triangle-exclamation" style="margin-right: 6px;"></i>Fault Types
+                        </button>
+                        <button class="btn-subtab" id="btn-subtab-condition-levels" onclick="switchMasterSubTab('condition-levels')">
+                            <i class="fa-solid fa-signal" style="margin-right: 6px;"></i>Condition Levels
+                        </button>
+                        <button class="btn-subtab" id="btn-subtab-alarm-rules" onclick="switchMasterSubTab('alarm-rules')">
+                            <i class="fa-solid fa-sliders" style="margin-right: 6px;"></i>Alarm Rules / Thresholds
+                        </button>
+                    </div>
+                </div>
 
-                    <div class="card glass-card table-card" style="grid-column: 1 / -1;">
-                        <div class="table-toolbar">
-                            <h3>Alarm Rules</h3>
-                            <button class="btn-outline" onclick="addAlarmRow()"><i class="fa-solid fa-plus" style="margin-right:6px;"></i>Add row</button>
-                        </div>
-                            <div class="table-responsive-wrap">
-                                <table class="data-table">
-                                    <thead>
-                                        <tr>
-                                            <th>Name</th>
-                                            <th>Parameter</th>
-                                            <th>Tier</th>
-                                            <th>Device</th>
-                                            <th>Message</th>
-                                            <th>Value</th>
-                                            <th>Condition</th>
-                                            <th>Enabled</th>
-                                            <th></th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="alarm-rules-body"></tbody>
-                                </table>
+                <!-- SUB-TAB 1: FAULT TYPES -->
+                <div id="subtab-panel-fault-types" class="subtab-panel">
+                    <div class="card glass-card table-card">
+                        <div class="table-toolbar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                            <div>
+                                <h3 style="margin:0;">Fault Types Master</h3>
+                                <p style="font-size:12px; color:var(--text-muted); margin-top:4px; margin-bottom:0;">Manage motor fault types and recommended actions for maintenance troubleshooting.</p>
                             </div>
-                            <button class="btn-action" id="save-all-btn" style="margin-top:16px;" onclick="saveAllAlarmRules()" disabled>Save All</button>                    
+                            <button class="btn-outline" onclick="addFaultTypeRow()"><i class="fa-solid fa-plus" style="margin-right:6px;"></i>Add Fault Type</button>
                         </div>
+                        <div class="table-responsive-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 22%;">Name</th>
+                                        <th style="width: 34%;">Description</th>
+                                        <th style="width: 34%;">Recommended Action</th>
+                                        <th style="width: 10%; text-align:center;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fault-types-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-TAB 2: CONDITION LEVELS -->
+                <div id="subtab-panel-condition-levels" class="subtab-panel" style="display: none;">
+                    <div class="card glass-card table-card">
+                        <div class="table-toolbar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                            <div>
+                                <h3 style="margin:0;">Condition Levels Master</h3>
+                                <p style="font-size:12px; color:var(--text-muted); margin-top:4px; margin-bottom:0;">Define condition states, severity ranks (1=Normal to 4=Failure), and UI badge colors.</p>
+                            </div>
+                            <button class="btn-outline" onclick="addConditionRow()"><i class="fa-solid fa-plus" style="margin-right:6px;"></i>Add Condition Level</button>
+                        </div>
+                        <div class="table-responsive-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 25%;">Name</th>
+                                        <th style="width: 20%;">Severity Level</th>
+                                        <th style="width: 40%;">Color Code / Style</th>
+                                        <th style="width: 15%; text-align:center;">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="conditions-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SUB-TAB 3: ALARM RULES / THRESHOLDS -->
+                <div id="subtab-panel-alarm-rules" class="subtab-panel" style="display: none;">
+                    <div class="card glass-card table-card">
+                        <div class="table-toolbar" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                            <div>
+                                <h3 style="margin:0;">Alarm Rules &amp; Thresholds</h3>
+                                <p style="font-size:12px; color:var(--text-muted); margin-top:4px; margin-bottom:0;">Configure parameter thresholds (Warning, Critical, Failure) for Condition-Based Monitoring.</p>
+                            </div>
+                            <button class="btn-outline" onclick="addAlarmRow()"><i class="fa-solid fa-plus" style="margin-right:6px;"></i>Add Row</button>
+                        </div>
+                        <div class="table-responsive-wrap">
+                            <table class="data-table">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Parameter</th>
+                                        <th>Tier</th>
+                                        <th>Device</th>
+                                        <th>Message</th>
+                                        <th>Value</th>
+                                        <th>Condition</th>
+                                        <th>Enabled</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="alarm-rules-body"></tbody>
+                            </table>
+                        </div>
+                        <button class="btn-action" id="save-all-btn" style="margin-top:16px;" onclick="saveAllAlarmRules()" disabled>Save All</button>
+                    </div>
                 </div>
             </div>
+        
             {% endif %}
 
         </main>
