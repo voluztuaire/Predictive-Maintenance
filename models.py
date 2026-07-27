@@ -48,3 +48,31 @@ class AlarmRule(db.Model):
             "condition": self.condition,
             "enabled": self.enabled,
         }
+
+class MasterFaultType(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), unique=True, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    recommended_action = db.Column(db.Text, nullable=True)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "description": self.description or "",
+            "recommended_action": self.recommended_action or ""
+        }
+
+class MasterCondition(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(50), unique=True, nullable=False)
+    severity_level = db.Column(db.Integer, nullable=False, default=1)
+    color_code = db.Column(db.String(30), nullable=False, default="green")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "severity_level": self.severity_level,
+            "color_code": self.color_code
+        }
