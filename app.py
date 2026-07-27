@@ -1105,6 +1105,7 @@ def get_alerts():
                 "icon": "fa-temperature-high",
                 "title": f"Critical Pattern Detected on {device_id_str}",
                 "description": f"{fault}: {prediction['probable_cause']}",
+                "recommendation": prediction.get("recommendation", ""),
                 "time": "Just now",
                 "action": "Investigate",
                 "device_id": device_id_str
@@ -1115,6 +1116,7 @@ def get_alerts():
                 "icon": "fa-circle-exclamation",
                 "title": f"Failure Risk on {device_id_str}",
                 "description": f"{fault}: {prediction['probable_cause']}",
+                "recommendation": prediction.get("recommendation", ""),
                 "time": "Just now",
                 "action": "Investigate",
                 "device_id": device_id_str
@@ -1125,6 +1127,7 @@ def get_alerts():
                 "icon": "fa-chart-line",
                 "title": f"Early Degradation Signs on {device_id_str}",
                 "description": f"{fault}: {prediction['probable_cause']}",
+                "recommendation": prediction.get("recommendation", ""),
                 "time": "Just now",
                 "action": "View Plan",
                 "device_id": device_id_str
@@ -1264,6 +1267,7 @@ def get_logs():
             "icon": icon_map.get(label, "fa-shield"),
             "title": title_map.get(label, "Status Update"),
             "description": f"Fault: {fault}. RUL: {int(prediction['rul_hours'])} hours. {prediction['probable_cause']}",
+            "recommendation": prediction.get("recommendation", ""),
             "device": f"Induction Motor {row['motor_id']}",
             "device_id": str(row["motor_id"]),
             "time": row["timestamp"].strftime("%Y-%m-%d %H:%M")

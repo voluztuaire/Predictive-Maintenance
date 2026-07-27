@@ -559,12 +559,18 @@ function fetchAndRenderAlerts() {
             const container = document.getElementById('alert-list');
             container.innerHTML = '';
             alerts.forEach(a => {
+                const recText = a.recommendation || 'Inspect motor and check operating parameters';
+                const recHtml = `<div class="alert-recommendation" style="margin-top: 8px; color: #f97316; font-size: 12px; font-weight: 500;"><strong>Action:</strong> ${recText}</div>`;
                 const row = document.createElement('div');
                 row.className = 'alert-row';
                 row.innerHTML = `
                     <div class="alert-info">
                         <div class="icon-box ${a.type}"><i class="fa-solid ${a.icon}"></i></div>
-                        <div><h4>${a.title}</h4><p>${a.description}</p></div>
+                        <div>
+                            <h4>${a.title}</h4>
+                            <p>${a.description}</p>
+                            ${recHtml}
+                        </div>
                     </div>
                     <div class="alert-action">
                         <span class="time">${a.time}</span>
@@ -705,6 +711,8 @@ function renderLogsList() {
     }
 
     filtered.forEach(l => {
+        const recText = l.recommendation || 'Inspect motor and check operating parameters';
+        const recHtml = `<div class="alert-recommendation" style="margin-top: 8px; color: #f97316; font-size: 12px; font-weight: 500;"><strong>Action:</strong> ${recText}</div>`;
         const row = document.createElement('div');
         row.className = 'log-row';
         row.innerHTML = `
@@ -713,6 +721,7 @@ function renderLogsList() {
                 <div>
                     <h4>${l.title}</h4>
                     <p>${l.description}</p>
+                    ${recHtml}
                     <div class="log-meta">${l.device} - ${l.time}</div>
                 </div>
             </div>
