@@ -805,7 +805,7 @@ function switchTab(tabName, navEl) {
 
     if (tabName === 'forecast') { loadForecastComparePage(); }
     if (tabName === 'condition') { loadConditionAlerts(); }
-    if (tabName === 'training') { loadReviewQueue(); loadModelHistory(); loadPendingTrainingData(); }
+    if (tabName === 'training') { masterFaultTypesListCache = null; masterConditionsListCache = null; loadReviewQueue(); loadModelHistory(); loadPendingTrainingData(); }
     if (tabName === 'masterdata') { switchMasterSubTab(currentMasterSubTab || 'fault-types'); }
     if (tabName === 'settings') { loadAlarmRules(); }
 }
@@ -2059,6 +2059,7 @@ function saveFaultType(btnEl) {
             if (data.error) {
                 showModal({ type: 'warning', title: 'Save Failed', message: data.error, buttonText: 'OK' });
             } else {
+                masterFaultTypesListCache = null;
                 showModal({ type: 'info', title: 'Success', message: 'Fault Type saved successfully!', buttonText: 'OK' });
                 loadFaultTypes();
             }
@@ -2080,6 +2081,7 @@ function deleteFaultType(id, btnEl) {
             if (data.error) {
                 showModal({ type: 'warning', title: 'Delete Failed', message: data.error, buttonText: 'OK' });
             } else {
+                masterFaultTypesListCache = null;
                 loadFaultTypes();
             }
         })
@@ -2163,6 +2165,7 @@ function saveConditionLevel(btnEl) {
             if (data.error) {
                 showModal({ type: 'warning', title: 'Save Failed', message: data.error, buttonText: 'OK' });
             } else {
+                masterConditionsListCache = null;
                 showModal({ type: 'info', title: 'Success', message: 'Condition Level saved successfully!', buttonText: 'OK' });
                 loadConditionLevels();
             }
@@ -2184,6 +2187,7 @@ function deleteConditionLevel(id, btnEl) {
             if (data.error) {
                 showModal({ type: 'warning', title: 'Delete Failed', message: data.error, buttonText: 'OK' });
             } else {
+                masterConditionsListCache = null;
                 loadConditionLevels();
             }
         })
