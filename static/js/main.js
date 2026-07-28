@@ -11,9 +11,9 @@ const PARAM_DETAIL_CONFIG = {
         { key: 'temperature', label: 'Temperature', color: '#f97316' }
     ], thresholdParams: ['Temperature'] },
     vib: { title: 'Vibration', fields: [
-        { key: 'vibration_x', label: 'X', color: '#a855f7' },
-        { key: 'vibration_y', label: 'Y', color: '#9333ea' },
-        { key: 'vibration_z', label: 'Z', color: '#7e22ce' }
+        { key: 'vibration_x', label: 'X', color: '#ec4899' },
+        { key: 'vibration_y', label: 'Y', color: '#db2777' },
+        { key: 'vibration_z', label: 'Z', color: '#be185d' }
     ], thresholdParams: ['Vibration_X', 'Vibration_Y', 'Vibration_Z'] },
     volt: { title: 'Voltage', fields: [
         { key: 'voltage_l1', label: 'L1', color: '#38bdf8' },
@@ -265,6 +265,11 @@ function chartOptions() {
     };
 }
 
+function normalizeValue(val, min, max) {
+    if (max === min) return 50;
+    return Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100));
+}
+
 function initChart() {
     const url = currentDevice ? `/api/history?device=${encodeURIComponent(currentDevice)}&points=20` : '/api/history?points=20';
     fetch(url)
@@ -272,32 +277,81 @@ function initChart() {
         .then(data => {
             const ctx = document.getElementById('sensorChart').getContext('2d');
             if (sensorChartInstance) sensorChartInstance.destroy();
+
+            // range wajar tiap parameter, dipakai buat normalisasi ke 0-100%
+            const ranges = {
+                temperature: { min: 40, max: 70, unit: '°C' },
+                voltage: { min: 380, max: 410, unit: 'V' },
+                current: { min: 0, max: 12, unit: 'A' },
+                vibration: { min: 0, max: 10, unit: 'mm/s' },
+                rpm: { min: 1400, max: 1550, unit: 'RPM' },
+                frequency: { min: 45, max: 55, unit: 'Hz' },
+                power_factor: { min: 0.7, max: 1.0, unit: '' }
+            };
+
+            function buildDataset(label, rawData, color, key) {
+                const r = ranges[key];
+                return {
+                    label: label,
+                    data: rawData.map(v => normalizeValue(v, r.min, r.max)),
+                    rawData: rawData, // simpan nilai asli buat tooltip
+                    borderColor: color,
+                    backgroundColor: color + '1a',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: key === 'temperature',
+                    pointRadius: 3
+                };
+            }
+
             sensorChartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: data.labels,
                     datasets: [
-                        { label: 'Temperature (C)', data: data.temperature, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', borderWidth: 2, tension: 0.4, fill: true, yAxisID: 'yTemp' },
-                        { label: 'Voltage (V)', data: data.voltage, borderColor: '#38bdf8', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yVolt' },
-                        { label: 'Current (A)', data: data.current, borderColor: '#eab308', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yCurr' },
-                        { label: 'Vibration (mm/s)', data: data.vibration, borderColor: '#ec4899', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yVib' },
-                        { label: 'RPM', data: data.rpm, borderColor: '#22c55e', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yRPM' },
-                        { label: 'Frequency (Hz)', data: data.frequency, borderColor: '#8b5cf6', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yFreq' },
-                        { label: 'Power Factor', data: data.power_factor, borderColor: '#64748b', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yPF' }
+                        buildDataset('Temperature (C)', data.temperature, '#f97316', 'temperature'),
+                        buildDataset('Voltage (V)', data.voltage, '#38bdf8', 'voltage'),
+                        buildDataset('Current (A)', data.current, '#eab308', 'current'),
+                        buildDataset('Vibration (mm/s)', data.vibration, '#ec4899', 'vibration'),
+                        buildDataset('RPM', data.rpm, '#22c55e', 'rpm'),
+                        buildDataset('Frequency (Hz)', data.frequency, '#8b5cf6', 'frequency'),
+                        buildDataset('Power Factor', data.power_factor, '#64748b', 'power_factor')
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: getChartColors().textColor, boxWidth: 12, padding: 16 } } },
+                    layout: {
+                        padding: { top: 0 }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: getChartColors().textColor, boxWidth: 12, padding: 16 },
+                            padding: 20
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const ds = context.dataset;
+                                    const rawVal = ds.rawData[context.dataIndex];
+                                    const key = Object.keys(ranges).find(k => ranges[k] && ds.label.toLowerCase().includes(k.split('_')[0]));
+                                    const unit = key ? ranges[key].unit : '';
+                                    return `${ds.label}: ${rawVal}${unit ? ' ' + unit : ''}`;
+                                }
+                            }
+                        }
+                    },
                     scales: {
-                        yTemp: { position: 'left', grid: { color: getChartColors().gridColor }, ticks: { color: '#f97316' }, title: { display: true, text: 'Temp (C)', color: '#f97316' } },
-                        yVolt: { position: 'right', grid: { display: false }, ticks: { color: '#38bdf8' }, title: { display: true, text: 'Voltage (V)', color: '#38bdf8' }, min: 380, max: 410 },
-                        yCurr: { position: 'right', display: false, min: 0, max: 12 },
-                        yVib: { position: 'right', display: false, min: 0, max: 10 },
-                        yRPM: { position: 'right', display: false, min: 1400, max: 1550 },
-                        yFreq: { position: 'right', display: false, min: 45, max: 55 },
-                        yPF: { position: 'right', display: false, min: 0.7, max: 1.0 },
+                        y: {
+                            min: 0,
+                            max: 100,
+                            grid: { color: getChartColors().gridColor },
+                            ticks: {
+                                color: getChartColors().textColor,
+                                callback: function(val) { return val + '%'; }
+                            },
+                            title: { display: true, text: 'Relative Level (%)', color: getChartColors().textColor, padding: { bottom: 10 } }
+                        },
                         x: { grid: { color: getChartColors().gridColor }, ticks: { color: getChartColors().textColor } }
                     }
                 }
@@ -897,7 +951,7 @@ function loadSparklines() {
         .then(r => r.json())
         .then(data => {
             renderSparkline('spark-temp', data.labels, data.temperature, '#f97316');
-            renderSparkline('spark-vib', data.labels, data.vibration, '#a855f7');
+            renderSparkline('spark-vib', data.labels, data.vibration, '#ec4899');
             renderSparkline('spark-volt', data.labels, data.voltage, '#38bdf8');
             renderSparkline('spark-current', data.labels, data.current, '#eab308');
             renderSparkline('spark-rpm', data.labels, data.rpm, '#22c55e');
@@ -1357,6 +1411,7 @@ function loadConditionAlerts() {
             }
 
             data.alerts.forEach(a => {
+                const paramText = a.parameter ? `${a.parameter}` : `${a.condition_label}`;
                 const violList = a.violations.map(v =>
                     `<span class="severity-tag ${v.tier}">${v.parameter}: ${v.actual_value} (thr ${v.threshold})</span>`
                 ).join(' ');
@@ -1365,19 +1420,18 @@ function loadConditionAlerts() {
                 row.className = 'log-row';
                 row.innerHTML = `
                     <div class="log-info">
-                        <div class="icon-box ${a.status_color === 'red' ? 'critical' : a.status_color === 'orange' ? 'warning' : 'info'}">
+                        <div class="icon-box ${a.tier === 'failure' || a.status_color === 'red' ? 'critical' : a.tier === 'critical' || a.status_color === 'orange' ? 'warning' : 'info'}">
                             <i class="fa-solid fa-gauge-high"></i>
                         </div>
                         <div>
-                            <h4>${a.condition_label} — ${a.motor_id}</h4>
+                            <h4>${paramText} — ${a.motor_id}</h4>
                             <div class="viol-list-wrapper">${violList}</div>
                             <div class="log-meta">${a.timestamp}</div>
                         </div>
                     </div>
                     <div style="display: flex; align-items: center; gap: 10px; flex-shrink: 0;">
-                    <span class="severity-tag ${a.condition_label.toLowerCase()}">${a.total_violations} violation(s)</span>
-                            <!-- Tombol baru di bawah ini -->
-                            <button class="btn-action" onclick="submitForReview('${a.motor_id}', '${a.timestamp}')">Submit for Review</button>
+                        <span class="severity-tag ${(a.tier || a.condition_label).toLowerCase()}">${a.tier ? a.tier.toUpperCase() : `${a.total_violations} violation(s)`}</span>
+                        <button class="btn-action" onclick="submitForReview('${a.motor_id}', '${a.timestamp}', '${a.parameter || ''}')">Submit for Review</button>
                     </div>                
                 `;
                 container.appendChild(row);
@@ -1386,18 +1440,18 @@ function loadConditionAlerts() {
         .catch(err => console.error('Error loading condition alerts:', err));
 }
 
-function submitForReview(deviceId, timestamp) {
+function submitForReview(deviceId, timestamp, parameter) {
     fetch(`/api/expert-review/submit`, { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ device: deviceId, timestamp: timestamp })
+        body: JSON.stringify({ device: deviceId, timestamp: timestamp, parameter: parameter })
     })
         .then(r => r.json())
         .then(data => {
             if (data.error) {
                 showModal({ type: 'warning', title: 'Cannot Submit', message: data.error, buttonText: 'OK' });
             } else {
-                showModal({ type: 'success', title: 'Submitted', message: `${deviceId} added to expert review queue.`, buttonText: 'OK' });
+                showModal({ type: 'success', title: 'Submitted', message: `${deviceId}${parameter ? ` (${parameter})` : ''} added to expert review queue.`, buttonText: 'OK' });
                 loadConditionAlerts();
             }
         })
