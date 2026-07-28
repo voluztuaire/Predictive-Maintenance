@@ -7,47 +7,33 @@ let expandedParam = null;
 let fullSparkCharts = {};
 
 const PARAM_DETAIL_CONFIG = {
-    temp: {
-        title: 'Temperature', fields: [
-            { key: 'temperature', label: 'Temperature', color: '#f97316' }
-        ], thresholdParams: ['Temperature']
-    },
-    vib: {
-        title: 'Vibration', fields: [
-            { key: 'vibration_x', label: 'X', color: '#a855f7' },
-            { key: 'vibration_y', label: 'Y', color: '#9333ea' },
-            { key: 'vibration_z', label: 'Z', color: '#7e22ce' }
-        ], thresholdParams: ['Vibration_X', 'Vibration_Y', 'Vibration_Z']
-    },
-    volt: {
-        title: 'Voltage', fields: [
-            { key: 'voltage_l1', label: 'L1', color: '#38bdf8' },
-            { key: 'voltage_l2', label: 'L2', color: '#0ea5e9' },
-            { key: 'voltage_l3', label: 'L3', color: '#0369a1' }
-        ], thresholdParams: ['Voltage_L1', 'Voltage_L2', 'Voltage_L3']
-    },
-    current: {
-        title: 'Current', fields: [
-            { key: 'current_l1', label: 'L1', color: '#eab308' },
-            { key: 'current_l2', label: 'L2', color: '#ca8a04' },
-            { key: 'current_l3', label: 'L3', color: '#a16207' }
-        ], thresholdParams: ['Current_L1', 'Current_L2', 'Current_L3']
-    },
-    rpm: {
-        title: 'Rotational Speed', fields: [
-            { key: 'rpm', label: 'RPM', color: '#22c55e' }
-        ], thresholdParams: ['Rotational_Speed']
-    },
-    freq: {
-        title: 'Frequency', fields: [
-            { key: 'frequency', label: 'Frequency (Hz)', color: '#8b5cf6' }
-        ], thresholdParams: ['Frequency']
-    },
-    pf: {
-        title: 'Power Factor', fields: [
-            { key: 'power_factor', label: 'Power Factor', color: '#64748b' }
-        ], thresholdParams: ['Power_Factor']
-    }
+    temp: { title: 'Temperature', fields: [
+        { key: 'temperature', label: 'Temperature', color: '#f97316' }
+    ], thresholdParams: ['Temperature'] },
+    vib: { title: 'Vibration', fields: [
+        { key: 'vibration_x', label: 'X', color: '#a855f7' },
+        { key: 'vibration_y', label: 'Y', color: '#9333ea' },
+        { key: 'vibration_z', label: 'Z', color: '#7e22ce' }
+    ], thresholdParams: ['Vibration_X', 'Vibration_Y', 'Vibration_Z'] },
+    volt: { title: 'Voltage', fields: [
+        { key: 'voltage_l1', label: 'L1', color: '#38bdf8' },
+        { key: 'voltage_l2', label: 'L2', color: '#0ea5e9' },
+        { key: 'voltage_l3', label: 'L3', color: '#0369a1' }
+    ], thresholdParams: ['Voltage_L1', 'Voltage_L2', 'Voltage_L3'] },
+    current: { title: 'Current', fields: [
+        { key: 'current_l1', label: 'L1', color: '#eab308' },
+        { key: 'current_l2', label: 'L2', color: '#ca8a04' },
+        { key: 'current_l3', label: 'L3', color: '#a16207' }
+    ], thresholdParams: ['Current_L1', 'Current_L2', 'Current_L3'] },
+    rpm: { title: 'Rotational Speed', fields: [
+        { key: 'rpm', label: 'RPM', color: '#22c55e' }
+    ], thresholdParams: ['Rotational_Speed'] },
+    freq: { title: 'Frequency', fields: [
+        { key: 'frequency', label: 'Frequency (Hz)', color: '#8b5cf6' }
+    ], thresholdParams: ['Frequency'] },
+    pf: { title: 'Power Factor', fields: [
+        { key: 'power_factor', label: 'Power Factor', color: '#64748b' }
+    ], thresholdParams: ['Power_Factor'] }
 };
 
 let alarmRulesCache = null;
@@ -279,6 +265,11 @@ function chartOptions() {
     };
 }
 
+function normalizeValue(val, min, max) {
+    if (max === min) return 50;
+    return Math.max(0, Math.min(100, ((val - min) / (max - min)) * 100));
+}
+
 function initChart() {
     const url = currentDevice ? `/api/history?device=${encodeURIComponent(currentDevice)}&points=20` : '/api/history?points=20';
     fetch(url)
@@ -286,32 +277,81 @@ function initChart() {
         .then(data => {
             const ctx = document.getElementById('sensorChart').getContext('2d');
             if (sensorChartInstance) sensorChartInstance.destroy();
+
+            // range wajar tiap parameter, dipakai buat normalisasi ke 0-100%
+            const ranges = {
+                temperature: { min: 40, max: 70, unit: '°C' },
+                voltage: { min: 380, max: 410, unit: 'V' },
+                current: { min: 0, max: 12, unit: 'A' },
+                vibration: { min: 0, max: 10, unit: 'mm/s' },
+                rpm: { min: 1400, max: 1550, unit: 'RPM' },
+                frequency: { min: 45, max: 55, unit: 'Hz' },
+                power_factor: { min: 0.7, max: 1.0, unit: '' }
+            };
+
+            function buildDataset(label, rawData, color, key) {
+                const r = ranges[key];
+                return {
+                    label: label,
+                    data: rawData.map(v => normalizeValue(v, r.min, r.max)),
+                    rawData: rawData, // simpan nilai asli buat tooltip
+                    borderColor: color,
+                    backgroundColor: color + '1a',
+                    borderWidth: 2,
+                    tension: 0.4,
+                    fill: key === 'temperature',
+                    pointRadius: 3
+                };
+            }
+
             sensorChartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: data.labels,
                     datasets: [
-                        { label: 'Temperature (C)', data: data.temperature, borderColor: '#f97316', backgroundColor: 'rgba(249, 115, 22, 0.1)', borderWidth: 2, tension: 0.4, fill: true, yAxisID: 'yTemp' },
-                        { label: 'Voltage (V)', data: data.voltage, borderColor: '#38bdf8', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yVolt' },
-                        { label: 'Current (A)', data: data.current, borderColor: '#eab308', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yCurr' },
-                        { label: 'Vibration (mm/s)', data: data.vibration, borderColor: '#ec4899', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yVib' },
-                        { label: 'RPM', data: data.rpm, borderColor: '#22c55e', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yRPM' },
-                        { label: 'Frequency (Hz)', data: data.frequency, borderColor: '#8b5cf6', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yFreq' },
-                        { label: 'Power Factor', data: data.power_factor, borderColor: '#64748b', borderWidth: 2, tension: 0.4, fill: false, yAxisID: 'yPF' }
+                        buildDataset('Temperature (C)', data.temperature, '#f97316', 'temperature'),
+                        buildDataset('Voltage (V)', data.voltage, '#38bdf8', 'voltage'),
+                        buildDataset('Current (A)', data.current, '#eab308', 'current'),
+                        buildDataset('Vibration (mm/s)', data.vibration, '#ec4899', 'vibration'),
+                        buildDataset('RPM', data.rpm, '#22c55e', 'rpm'),
+                        buildDataset('Frequency (Hz)', data.frequency, '#8b5cf6', 'frequency'),
+                        buildDataset('Power Factor', data.power_factor, '#64748b', 'power_factor')
                     ]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    plugins: { legend: { labels: { color: getChartColors().textColor, boxWidth: 12, padding: 16 } } },
+                    layout: {
+                        padding: { top: 0 }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: { color: getChartColors().textColor, boxWidth: 12, padding: 16 },
+                            padding: 20
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    const ds = context.dataset;
+                                    const rawVal = ds.rawData[context.dataIndex];
+                                    const key = Object.keys(ranges).find(k => ranges[k] && ds.label.toLowerCase().includes(k.split('_')[0]));
+                                    const unit = key ? ranges[key].unit : '';
+                                    return `${ds.label}: ${rawVal}${unit ? ' ' + unit : ''}`;
+                                }
+                            }
+                        }
+                    },
                     scales: {
-                        yTemp: { position: 'left', grid: { color: getChartColors().gridColor }, ticks: { color: '#f97316' }, title: { display: true, text: 'Temp (C)', color: '#f97316' } },
-                        yVolt: { position: 'right', grid: { display: false }, ticks: { color: '#38bdf8' }, title: { display: true, text: 'Voltage (V)', color: '#38bdf8' }, min: 380, max: 410 },
-                        yCurr: { position: 'right', display: false, min: 0, max: 12 },
-                        yVib: { position: 'right', display: false, min: 0, max: 10 },
-                        yRPM: { position: 'right', display: false, min: 1400, max: 1550 },
-                        yFreq: { position: 'right', display: false, min: 45, max: 55 },
-                        yPF: { position: 'right', display: false, min: 0.7, max: 1.0 },
+                        y: {
+                            min: 0,
+                            max: 100,
+                            grid: { color: getChartColors().gridColor },
+                            ticks: {
+                                color: getChartColors().textColor,
+                                callback: function(val) { return val + '%'; }
+                            },
+                            title: { display: true, text: 'Relative Level (%)', color: getChartColors().textColor, padding: { bottom: 10 } }
+                        },
                         x: { grid: { color: getChartColors().gridColor }, ticks: { color: getChartColors().textColor } }
                     }
                 }
@@ -913,7 +953,7 @@ function loadSparklines() {
         .then(r => r.json())
         .then(data => {
             renderSparkline('spark-temp', data.labels, data.temperature, '#f97316');
-            renderSparkline('spark-vib', data.labels, data.vibration, '#a855f7');
+            renderSparkline('spark-vib', data.labels, data.vibration, '#ec4899');
             renderSparkline('spark-volt', data.labels, data.voltage, '#38bdf8');
             renderSparkline('spark-current', data.labels, data.current, '#eab308');
             renderSparkline('spark-rpm', data.labels, data.rpm, '#22c55e');
@@ -1420,62 +1460,71 @@ function submitForReview(deviceId, timestamp, parameter) {
         .catch(err => console.error('Error submitting review:', err));
 }
 
-function loadReviewQueue() {
-    fetch('/api/expert-review/list?status=pending')
-        .then(r => r.json())
-        .then(data => {
-            const container = document.getElementById('review-queue-list');
-            container.innerHTML = '';
+async function loadReviewQueue() {
+    let data, faultTypes, conditions;
+    try {
+        [data, faultTypes, conditions] = await Promise.all([
+            fetch('/api/expert-review/list?status=pending').then(r => r.json()),
+            getMasterFaultTypesCached(),
+            getMasterConditionsCached()
+        ]);
+    } catch (err) {
+        console.error('Error loading review queue:', err);
+        return;
+    }
 
-            if (data.length === 0) {
-                container.innerHTML = '<p style="color: var(--text-muted); font-size: 12px; padding: 12px 0;">No pending reviews.</p>';
-                return;
-            }
+    const container = document.getElementById('review-queue-list');
+    container.innerHTML = '';
 
-            data.forEach(item => {
-                const row = document.createElement('div');
-                row.className = 'log-row';
-                row.innerHTML = `
-                    <div class="log-info">
-                        <div class="icon-box warning"><i class="fa-solid fa-clipboard-question"></i></div>
-                        <div>
-                            <h4>${item.motor_id} — ${item.threshold_alert.condition_label}</h4>
-                            <div class="viol-list-wrapper">
-                                ${item.threshold_alert.violations.map(v =>
-                    `<span class="severity-tag ${v.tier}">${v.parameter}: ${v.actual_value} (thr ${v.threshold})</span>`
-                ).join('')}
-                            </div>
-                            <div class="log-meta">${item.created_at}</div>
-                        </div>
+    if (data.length === 0) {
+        container.innerHTML = '<p style="color: var(--text-muted); font-size: 12px; padding: 12px 0;">No pending reviews.</p>';
+        return;
+    }
+
+    const conditionOptions = conditions
+        .slice()
+        .sort((a, b) => a.severity_level - b.severity_level)
+        .map(c => `<option value="${c.name}" ${c.name === 'Critical' ? 'selected' : ''}>${c.name}</option>`)
+        .join('');
+
+    const faultOptions = faultTypes
+        .map(f => `<option value="${f.name}">${f.name}</option>`)
+        .join('');
+
+    data.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'log-row';
+        row.innerHTML = `
+            <div class="log-info">
+                <div class="icon-box warning"><i class="fa-solid fa-clipboard-question"></i></div>
+                <div>
+                    <h4>${item.motor_id} — ${item.threshold_alert.condition_label}</h4>
+                    <div class="viol-list-wrapper">
+                        ${item.threshold_alert.violations.map(v =>
+                            `<span class="severity-tag ${v.tier}">${v.parameter}: ${v.actual_value} (thr ${v.threshold})</span>`
+                        ).join('')}
                     </div>
-                    <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end; flex-shrink:0; min-width:320px; max-width:450px;">
-                        <div style="display:flex; gap:8px; width:100%; justify-content:flex-end;">
-                            <select id="label-${item.review_id}" class="filter-select" style="flex:1;">
-                                <option value="Normal">Normal</option>
-                                <option value="Warning">Warning</option>
-                                <option value="Critical" selected>Critical</option>
-                                <option value="Failure">Failure</option>
-                            </select>
-                            <select id="fault-${item.review_id}" class="filter-select" style="flex:1;">
-                                <option value="Normal">Normal</option>
-                                <option value="Rotor Bar">Rotor Bar</option>
-                                <option value="Bearing Wear">Bearing Wear</option>
-                                <option value="Misalignment">Misalignment</option>
-                                <option value="Stator Winding">Stator Winding</option>
-                                <option value="Other">Other / Unrecognized</option>
-                            </select>
-                        </div>
-                        <input type="text" id="notes-${item.review_id}" placeholder="Specify anomaly details (Optional)" class="setting-input" style="width: 100%; padding: 6px 12px; height: 32px; font-size: 13px; box-sizing: border-box;">
-                        <div style="display:flex; gap:8px; justify-content:flex-end; width:100%;">
-                            <button class="btn-action" onclick="approveReview('${item.review_id}')">Approve</button>
-                            <button class="btn-outline" onclick="rejectReview('${item.review_id}')">Reject</button>
-                        </div>
-                    </div>
-                `;
-                container.appendChild(row);
-            });
-        })
-        .catch(err => console.error('Error loading review queue:', err));
+                    <div class="log-meta">${item.created_at}</div>
+                </div>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end; flex-shrink:0; min-width:320px; max-width:450px;">
+                <div style="display:flex; gap:8px; width:100%; justify-content:flex-end;">
+                    <select id="label-${item.review_id}" class="filter-select" style="flex:1;">
+                        ${conditionOptions}
+                    </select>
+                    <select id="fault-${item.review_id}" class="filter-select" style="flex:1;">
+                        ${faultOptions}
+                    </select>
+                </div>
+                <input type="text" id="notes-${item.review_id}" placeholder="Specify anomaly details (Optional)" class="setting-input" style="width: 100%; padding: 6px 12px; height: 32px; font-size: 13px; box-sizing: border-box;">
+                <div style="display:flex; gap:8px; justify-content:flex-end; width:100%;">
+                    <button class="btn-action" onclick="approveReview('${item.review_id}')">Approve</button>
+                    <button class="btn-outline" onclick="rejectReview('${item.review_id}')">Reject</button>
+                </div>
+            </div>
+        `;
+        container.appendChild(row);
+    });
 }
 
 function approveReview(reviewId) {
@@ -2139,4 +2188,20 @@ function deleteConditionLevel(id, btnEl) {
             }
         })
         .catch(err => console.error('Error deleting condition level:', err));
+}
+
+let masterFaultTypesListCache = null;
+async function getMasterFaultTypesCached() {
+    if (masterFaultTypesListCache) return masterFaultTypesListCache;
+    const res = await fetch('/api/master/fault-types');
+    masterFaultTypesListCache = await res.json();
+    return masterFaultTypesListCache;
+}
+
+let masterConditionsListCache = null;
+async function getMasterConditionsCached() {
+    if (masterConditionsListCache) return masterConditionsListCache;
+    const res = await fetch('/api/master/conditions');
+    masterConditionsListCache = await res.json();
+    return masterConditionsListCache;
 }

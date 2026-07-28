@@ -529,7 +529,7 @@ def predict_row(row):
     temp = float(row["Temperature"])
     vib = math.sqrt(row["Vibration_X"]**2 + row["Vibration_Y"]**2 + row["Vibration_Z"]**2)
     rpm_dev = abs(float(row["Rotational_Speed"]) - 1500)
-    voltage_imbalance_pct = float(row["Voltage_Imbalance"]) / float(row["Voltage_Mean"]) * 100
+    voltage_imbalance_pct = float(row["Voltage_Imbalance_Pct"])
 
     def score_from(value, healthy_max, fail_at):
         if value <= healthy_max:
@@ -816,17 +816,20 @@ def get_last_trained_label():
 
 import random
 
-def adjust_power_factor(val):
+def adjust_power_factor(val, seed=None):
     try:
         fval = float(val)
-        if fval >= 0.999:  # Jika bernilai 1.0 atau ~1, berikan fluktuasi acak 0.94 - 0.99
-            return round(random.uniform(0.94, 0.99), 2)
+        if fval >= 0.999:
+            rng = random.Random(seed) if seed is not None else random
+            return round(rng.uniform(0.94, 0.99), 2)
         return round(fval, 2)
     except (ValueError, TypeError):
         return val
 
-def adjust_power_factor_list(values):
-    return [adjust_power_factor(v) for v in values]
+def adjust_power_factor_list(values, seeds=None):
+    if seeds is None:
+        return [adjust_power_factor(v) for v in values]
+    return [adjust_power_factor(v, s) for v, s in zip(values, seeds)]
 
 @app.route("/api/status")
 @login_required
@@ -863,7 +866,7 @@ def get_status():
         "current_l2": round(float(row["Current_L2"]), 2),
         "current_l3": round(float(row["Current_L3"]), 2),
         "frequency": round(float(row["Frequency"]), 2),
-        "power_factor": adjust_power_factor(row["Power_Factor"]),
+        "power_factor": adjust_power_factor(row["Power_Factor"], seed=f"{row['motor_id']}_{row['timestamp']}"),
         "device": str(row["motor_id"])
     })
 
@@ -895,7 +898,10 @@ def get_history():
         "current_l2": window_df["Current_L2"].round(2).tolist(),
         "current_l3": window_df["Current_L3"].round(2).tolist(),
         "frequency": window_df["Frequency"].round(2).tolist(),
-        "power_factor": adjust_power_factor_list(window_df["Power_Factor"]),
+        "power_factor": adjust_power_factor_list(
+            window_df["Power_Factor"],
+            seeds=[f"{device_id}_{ts}" for ts in window_df["timestamp"]]
+        ),
     })
 
 @app.route("/api/threshold-alerts")
@@ -904,12 +910,26 @@ def api_threshold_alerts():
     device_id = request.args.get("device")
     alerts = []
 
+    # NEW: kumpulin (motor_id, parameter) yang statusnya masih 'pending'
+    # di review queue -> jangan ditampilkan lagi di Condition Alerts page,
+    # soalnya udah "diakui" ada dan lagi nunggu expert review.
+    pending_reviews = list_reviews(status="pending")
+    pending_keys = set()
+    for r in pending_reviews:
+        param = r.threshold_alert.get("parameter") if r.threshold_alert else None
+        pending_keys.add((r.motor_id, param))
+
     motors_to_check = [device_id] if device_id else ALL_MOTOR_IDS
     for mid in motors_to_check:
         row = get_row_for_device(mid)
         res = get_threshold_alerts(row)
         if res["is_labeling_candidate"]:
             for v in res["violations"]:
+                # NEW: skip kalau kombinasi motor+parameter ini
+                # udah ada di queue dengan status pending
+                if (mid, v["parameter"]) in pending_keys:
+                    continue
+
                 alerts.append({
                     "alert_id": f"ALT-{mid}-{v['parameter']}-{res['timestamp']}",
                     "motor_id": mid,
@@ -970,8 +990,6 @@ def api_submit_review():
     sensor_data = row[SN_SENSOR_COLS].to_dict()
     review = submit_for_review(alert, sensor_data)
     return jsonify(review.to_dict())
-
-
 
 
 @app.route("/api/expert-review/list")
@@ -1243,7 +1261,7 @@ def get_sensors():
             "current_l2": round(float(row["Current_L2"]), 2),
             "current_l3": round(float(row["Current_L3"]), 2),
             "frequency": round(float(row["Frequency"]), 2),
-            "power_factor": adjust_power_factor(row["Power_Factor"]),
+            "power_factor": adjust_power_factor(row["Power_Factor"], seed=f"{row['motor_id']}_{row['timestamp']}"),
         })
 
     return jsonify(readings)
@@ -1329,7 +1347,10 @@ def get_forecast():
             "Current_L2": result["Current_L2"].round(2).tolist(),
             "Current_L3": result["Current_L3"].round(2).tolist(),
             "Frequency": result["Frequency"].round(2).tolist(),
-            "Power_Factor": adjust_power_factor_list(result["Power_Factor"]),
+            "Power_Factor": adjust_power_factor_list(
+                result["Power_Factor"],
+                seeds=[f"{device_id}_{ts}" for ts in result["Timestamp"]]
+            ),
             "Rotational_Speed": result["Rotational_Speed"].round(0).astype(int).tolist(),
         }
     })
@@ -1396,7 +1417,7 @@ def generate_report():
             "current": ("Current Avg (A)", str(get_avg_current(row))),
             "rpm": ("Rotational Speed (RPM)", str(round(float(row["Rotational_Speed"])))),
             "freq": ("Frequency (Hz)", str(round(float(row["Frequency"]), 2))),
-            "pf": ("Power Factor", str(round(float(row["Power_Factor"]), 2))),
+            "pf": ("Power Factor", str(adjust_power_factor(row["Power_Factor"], seed=f"{device_id}_{row['timestamp']}"))),
         }
         for f in selected_fields:
             if f in field_map:
@@ -1434,7 +1455,10 @@ def generate_report():
             ("current", "Current Avg", [get_avg_current(r) for _, r in motor_hist.iterrows()], "#eab308"),
             ("rpm", "Rotational Speed", motor_hist["Rotational_Speed"], "#22c55e"),
             ("freq", "Frequency", motor_hist["Frequency"], "#8b5cf6"),
-            ("pf", "Power Factor", motor_hist["Power_Factor"], "#64748b"),
+            ("pf", "Power Factor", adjust_power_factor_list(
+                motor_hist["Power_Factor"],
+                seeds=[f"{device_id}_{ts}" for ts in motor_hist["timestamp"]]
+            ), "#64748b"),
         ]
 
         # Buat daftar jam untuk sumbu X

@@ -75,4 +75,4 @@ class MasterCondition(db.Model):
             "name": self.name,
             "severity_level": self.severity_level,
             "color_code": self.color_code
-        }
+        }
