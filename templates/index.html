@@ -76,6 +76,13 @@
                 </a>
             </li>
 
+            <li class="nav-item" data-tab="settings" onclick="switchTab('settings', this)">
+                <a href="#settings">
+                    <span class="icon"><i class="fa-solid fa-gear"></i></span>
+                    <span class="text">Settings</span>
+                </a>
+            </li>
+
             {% endif %}
         </ul>
 
@@ -712,8 +719,17 @@
                                 <tbody id="alarm-rules-body"></tbody>
                             </table>
                         </div>
-                        <button class="btn-action" id="save-all-btn" style="margin-top:16px;" onclick="saveAllAlarmRules()" disabled>Save All</button>
                     </div>
+                </div>
+            </div>
+
+            <!-- SETTINGS (admin only) -->
+            <div class="page-section" id="page-settings" style="display: none;">
+                <div class="card glass-card">
+                    <h3>System Settings</h3>
+                    <p style="color:var(--text-muted); font-size:13px; margin-top:8px;">
+                        Master Data management has been moved to the <a href="#masterdata" onclick="switchTab('masterdata')" style="color:var(--accent-cyan);">Master Data</a> page in the sidebar menu.
+                    </p>
                 </div>
             </div>
         

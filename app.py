@@ -588,7 +588,9 @@ def predict_row_cached(motor_id, row):
     cache_key = (motor_id, idx)
     
     if cache_key in _prediction_cache:
-        return _prediction_cache[cache_key]
+        cached = _prediction_cache[cache_key]
+        if "recommendation" in cached:
+            return cached
         
     result = predict_row(row)
     _prediction_cache[cache_key] = result
@@ -989,6 +991,7 @@ def api_submit_review():
     review = submit_for_review(alert, sensor_data)
     return jsonify(review.to_dict())
 
+
 @app.route("/api/expert-review/list")
 @login_required
 def api_list_reviews():
@@ -1170,12 +1173,13 @@ def get_alerts():
             "icon": "fa-shield",
             "title": f"{device_id} Normal" if device_id else "All Motors Normal",
             "description": "No degradation patterns detected." if device_id else "No degradation patterns detected across monitored motors.",
+            "recommendation": "Normal condition, continue routine monitoring.",
             "time": "Just now",
             "action": None,
-            "device_id": None
+            "device_id": device_id or ""
         })
 
-    return jsonify(alerts[:20])
+    return jsonify({"count": len(alerts), "alerts": alerts})
 
 @app.route("/api/notifications")
 @login_required
@@ -1234,10 +1238,11 @@ def get_sensors():
 
     for row in rows:
         prediction = predict_row_cached(str(row["motor_id"]), row)
-        status = SENSOR_STATUS_MAP.get(prediction["condition_label"], "Normal")
+        label = prediction["condition_label"]
+        status = SENSOR_STATUS_MAP.get(label, "Normal")
 
         readings.append({
-            "motor_id": str(row["motor_id"]),
+            "device_id": str(row["motor_id"]),
             "motor_name": f"Induction Motor {row['motor_id']}",
             "temperature": float(row["Temperature"]),
             "vibration": get_vibration_rms(row),
