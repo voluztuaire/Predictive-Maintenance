@@ -437,6 +437,9 @@
 </head>
 <body>
     <div class="auth-wrap">
+        <button class="theme-toggle-btn auth-theme-toggle" id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle Light/Dark Mode" style="position: absolute; top: 24px; right: 24px; z-index: 10;">
+            <i class="fa-solid fa-sun" id="theme-icon"></i>
+        </button>
         <div class="auth-bg"></div>
         <div class="auth-grid"></div>
         
@@ -529,5 +532,36 @@
             </div>
         </div>
     </div>
+
+    <script>
+        function applyTheme(theme) {
+            const icon = document.getElementById('theme-icon');
+            if (theme === 'light') {
+                document.body.classList.add('light-mode');
+                if (icon) {
+                    icon.classList.remove('fa-sun');
+                    icon.classList.add('fa-moon');
+                }
+            } else {
+                document.body.classList.remove('light-mode');
+                if (icon) {
+                    icon.classList.remove('fa-moon');
+                    icon.classList.add('fa-sun');
+                }
+            }
+        }
+
+        function toggleTheme() {
+            const isLight = document.body.classList.contains('light-mode');
+            const newTheme = isLight ? 'dark' : 'light';
+            localStorage.setItem('theme', newTheme);
+            applyTheme(newTheme);
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            applyTheme(savedTheme);
+        });
+    </script>
 </body>
 </html>

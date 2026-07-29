@@ -880,3 +880,52 @@ body.light-mode {
     cursor: not-allowed;
     pointer-events: none;
 }
+
+/* Auth Pages Light Mode Support */
+body.light-mode .auth-wrap {
+    background: var(--bg-main);
+}
+body.light-mode .auth-bg {
+    background: 
+        radial-gradient(circle at 20% 50%, rgba(249, 115, 22, 0.08) 0%, transparent 60%),
+        radial-gradient(circle at 80% 50%, rgba(249, 115, 22, 0.05) 0%, transparent 60%),
+        #f4f7f6;
+}
+body.light-mode .auth-grid {
+    background-image: 
+        linear-gradient(rgba(0,0,0,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,0,0,0.03) 1px, transparent 1px);
+}
+body.light-mode .auth-brand-logo h1,
+body.light-mode .auth-brand h2 {
+    background: linear-gradient(135deg, #1e293b 60%, rgba(30,41,59,0.8));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+body.light-mode .auth-card {
+    background: var(--glass-bg-solid);
+    border: 1px solid var(--border-color);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.06);
+}
+body.light-mode .auth-field input {
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+}
+body.light-mode .auth-field input:focus {
+    background: #ffffff;
+    border-color: var(--primary-orange);
+}
+body.light-mode .demo-hint {
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+}
+body.light-mode .demo-hint code {
+    background: rgba(0,0,0,0.05);
+    color: var(--text-main);
+}
+body.light-mode .auth-theme-toggle {
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid var(--border-color);
+    box-shadow: var(--shadow);
+}
